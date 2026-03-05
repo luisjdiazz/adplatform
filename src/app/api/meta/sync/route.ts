@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getCampaigns, getCampaignInsights } from "@/lib/meta";
+import { getCampaigns, getCampaignInsights, getAdSets, getAds, getAdInsights } from "@/lib/meta";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -25,13 +25,14 @@ export async function POST(req: NextRequest) {
       });
 
       for (const camp of campaigns.data || []) {
+        // Get campaign insights
         let metrics = {};
         try {
           const insights = await getCampaignInsights(camp.id, account.accessToken);
           if (insights.data?.[0]) metrics = insights.data[0];
         } catch {}
 
-        await prisma.campaign.upsert({
+        const dbCampaign = await prisma.campaign.upsert({
           where: { metaId: camp.id },
           update: {
             name: camp.name,
@@ -51,6 +52,68 @@ export async function POST(req: NextRequest) {
           },
         });
         synced++;
+
+        // Sync adsets for this campaign
+        try {
+          const adSets = await getAdSets(camp.id, account.accessToken);
+          for (const adSet of adSets.data || []) {
+            let adSetMetrics = {};
+            try {
+              const insights = await getCampaignInsights(adSet.id, account.accessToken);
+              if (insights.data?.[0]) adSetMetrics = insights.data[0];
+            } catch {}
+
+            const dbAdSet = await prisma.adSet.upsert({
+              where: { metaId: adSet.id },
+              update: {
+                name: adSet.name,
+                targeting: adSet.targeting || {},
+                budget: parseFloat(adSet.daily_budget || adSet.lifetime_budget || "0") / 100,
+                metrics: adSetMetrics,
+              },
+              create: {
+                campaignId: dbCampaign.id,
+                metaId: adSet.id,
+                name: adSet.name,
+                targeting: adSet.targeting || {},
+                budget: parseFloat(adSet.daily_budget || adSet.lifetime_budget || "0") / 100,
+                metrics: adSetMetrics,
+              },
+            });
+
+            // Sync ads for this adset
+            try {
+              const ads = await getAds(adSet.id, account.accessToken);
+              for (const ad of ads.data || []) {
+                let adMetrics = {};
+                try {
+                  const adInsights = await getAdInsights(ad.id, account.accessToken);
+                  if (adInsights.data?.[0]) adMetrics = adInsights.data[0];
+                } catch {}
+
+                const thumbnailUrl = ad.creative?.thumbnail_url || null;
+
+                await prisma.ad.upsert({
+                  where: { metaId: ad.id },
+                  update: {
+                    name: ad.name,
+                    status: ad.status,
+                    creativeUrl: thumbnailUrl,
+                    metrics: adMetrics,
+                  },
+                  create: {
+                    adSetId: dbAdSet.id,
+                    metaId: ad.id,
+                    name: ad.name,
+                    status: ad.status,
+                    creativeUrl: thumbnailUrl,
+                    metrics: adMetrics,
+                  },
+                });
+              }
+            } catch {}
+          }
+        } catch {}
       }
 
       await prisma.metaAccount.update({

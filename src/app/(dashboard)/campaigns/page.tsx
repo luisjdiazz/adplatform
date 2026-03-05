@@ -7,7 +7,27 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { MetricsCard } from "@/components/campaigns/MetricsCard";
-import { RefreshCw, Loader2 } from "lucide-react";
+import {
+  RefreshCw, Loader2, Pause, Play, Archive, Trash2, Brain,
+  ChevronDown, ChevronUp, Filter,
+} from "lucide-react";
+
+interface Ad {
+  id: string;
+  name: string;
+  status: string;
+  creativeUrl: string | null;
+  metrics: any;
+}
+
+interface AdSet {
+  id: string;
+  name: string;
+  targeting: any;
+  budget: number | null;
+  metrics: any;
+  ads: Ad[];
+}
 
 interface Campaign {
   id: string;
@@ -17,7 +37,7 @@ interface Campaign {
   budget: number | null;
   metrics: any;
   client: { name: string };
-  adSets: any[];
+  adSets: AdSet[];
 }
 
 const statusColors: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
@@ -27,6 +47,13 @@ const statusColors: Record<string, "success" | "warning" | "destructive" | "seco
   ARCHIVED: "destructive",
 };
 
+const statusLabels: Record<string, string> = {
+  all: "Todas",
+  ACTIVE: "Activas",
+  PAUSED: "Pausadas",
+  ARCHIVED: "Archivadas",
+};
+
 export default function CampaignsPage() {
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const [selectedClient, setSelectedClient] = useState("");
@@ -34,6 +61,11 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ACTIVE");
+  const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<Record<string, any>>({});
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/clients")
@@ -47,6 +79,10 @@ export default function CampaignsPage() {
 
   useEffect(() => {
     if (!selectedClient) return;
+    loadCampaigns();
+  }, [selectedClient]);
+
+  function loadCampaigns() {
     setLoading(true);
     fetch(`/api/campaigns?clientId=${selectedClient}`)
       .then((r) => r.json())
@@ -55,13 +91,12 @@ export default function CampaignsPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [selectedClient]);
+  }
 
   async function handleSync() {
     if (!selectedClient) return;
     setSyncing(true);
     setSyncMessage("");
-
     try {
       const res = await fetch("/api/meta/sync", {
         method: "POST",
@@ -70,12 +105,8 @@ export default function CampaignsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setSyncMessage(`Sincronizadas ${data.synced} campanas`);
-
-      // Reload campaigns
-      const campRes = await fetch(`/api/campaigns?clientId=${selectedClient}`);
-      const campData = await campRes.json();
-      setCampaigns(campData.campaigns || []);
+      setSyncMessage(`Sincronizadas ${data.synced} campanas con adsets y ads`);
+      loadCampaigns();
     } catch (err: any) {
       setSyncMessage(`Error: ${err.message}`);
     } finally {
@@ -83,12 +114,61 @@ export default function CampaignsPage() {
     }
   }
 
+  async function handleAction(campaignId: string, action: string) {
+    if (action === "delete" && !confirm("Seguro que quieres eliminar esta campana? Se eliminara tambien en Meta.")) {
+      return;
+    }
+    setActionLoading(campaignId);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      loadCampaigns();
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleAnalyze(campaignId: string) {
+    setAnalyzingId(campaignId);
+    setExpandedCampaign(campaignId);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/analyze`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setAnalysis((prev) => ({ ...prev, [campaignId]: data.analysis }));
+    } catch (err: any) {
+      alert(`Error al analizar: ${err.message}`);
+    } finally {
+      setAnalyzingId(null);
+    }
+  }
+
+  const filtered = campaigns.filter((c) => statusFilter === "all" || c.status === statusFilter);
+
+  const activeCampaigns = campaigns.filter((c) => c.status === "ACTIVE");
+  const totalSpend = activeCampaigns.reduce((sum, c) => {
+    const m = c.metrics as any;
+    return sum + (parseFloat(m?.spend) || 0);
+  }, 0);
+  const totalImpressions = activeCampaigns.reduce((sum, c) => {
+    const m = c.metrics as any;
+    return sum + (parseInt(m?.impressions) || 0);
+  }, 0);
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <h2 className="text-3xl font-bold">Campanas</h2>
-        <div className="flex items-center gap-4">
-          <div className="w-64">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="w-48">
             <Label className="text-xs text-muted-foreground">Cliente</Label>
             <Select value={selectedClient} onValueChange={setSelectedClient}>
               <SelectTrigger><SelectValue placeholder="Selecciona cliente" /></SelectTrigger>
@@ -99,15 +179,58 @@ export default function CampaignsPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={handleSync} disabled={syncing || !selectedClient} variant="outline">
-            {syncing ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sincronizando...</>
-            ) : (
-              <><RefreshCw className="mr-2 h-4 w-4" /> Sincronizar con Meta</>
-            )}
-          </Button>
+          <div className="w-40">
+            <Label className="text-xs text-muted-foreground">Estado</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(statusLabels).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="pt-4">
+            <Button onClick={handleSync} disabled={syncing || !selectedClient} variant="outline">
+              {syncing ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sincronizando...</>
+              ) : (
+                <><RefreshCw className="mr-2 h-4 w-4" /> Sincronizar</>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* Summary cards */}
+      {!loading && campaigns.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Campanas Activas</p>
+              <p className="text-2xl font-bold">{activeCampaigns.length}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Total Campanas</p>
+              <p className="text-2xl font-bold">{campaigns.length}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Gasto (7 dias)</p>
+              <p className="text-2xl font-bold">${totalSpend.toFixed(2)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Impresiones (7 dias)</p>
+              <p className="text-2xl font-bold">{totalImpressions.toLocaleString()}</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {syncMessage && (
         <div className={`rounded-md p-3 text-sm ${syncMessage.startsWith("Error") ? "bg-destructive/10 text-destructive" : "bg-green-50 text-green-800"}`}>
@@ -115,42 +238,196 @@ export default function CampaignsPage() {
         </div>
       )}
 
+      {/* Campaign list */}
       {loading ? (
         <p className="text-muted-foreground">Cargando campanas...</p>
-      ) : campaigns.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-muted-foreground">
-              No hay campanas. Dale click a "Sincronizar con Meta" para traer tus campanas.
+              {campaigns.length === 0
+                ? 'No hay campanas. Dale click a "Sincronizar" para traer tus campanas de Meta.'
+                : `No hay campanas con estado "${statusLabels[statusFilter]}".`}
             </p>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {campaigns.map((campaign) => {
+        <div className="space-y-3">
+          {filtered.map((campaign) => {
             const metrics = campaign.metrics as any;
+            const isExpanded = expandedCampaign === campaign.id;
+            const campaignAnalysis = analysis[campaign.id];
+            const isAnalyzing = analyzingId === campaign.id;
+            const isActioning = actionLoading === campaign.id;
+
             return (
               <div key={campaign.id} className="space-y-2">
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-lg">{campaign.name}</CardTitle>
-                        <p className="text-sm text-muted-foreground">{campaign.client.name}</p>
+                      <div className="flex-1 cursor-pointer" onClick={() => setExpandedCampaign(isExpanded ? null : campaign.id)}>
+                        <div className="flex items-center gap-2">
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          <CardTitle className="text-lg">{campaign.name}</CardTitle>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 ml-6">
+                          <span className="text-xs text-muted-foreground">{campaign.client.name}</span>
+                          {campaign.budget && (
+                            <span className="text-xs text-muted-foreground">
+                              ${campaign.budget.toFixed(2)}/dia
+                            </span>
+                          )}
+                          {campaign.adSets.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              {campaign.adSets.length} adsets - {campaign.adSets.reduce((s, a) => s + a.ads.length, 0)} ads
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant={statusColors[campaign.status] || "secondary"}>
                           {campaign.status}
                         </Badge>
                         {campaign.objective && (
-                          <Badge variant="outline">{campaign.objective}</Badge>
+                          <Badge variant="outline" className="text-xs">{campaign.objective}</Badge>
                         )}
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-1 ml-2">
+                          <Button
+                            size="sm" variant="outline"
+                            onClick={() => handleAnalyze(campaign.id)}
+                            disabled={isAnalyzing}
+                            title="Analizar con IA"
+                          >
+                            {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+                          </Button>
+                          {campaign.status === "ACTIVE" ? (
+                            <Button
+                              size="sm" variant="outline"
+                              onClick={() => handleAction(campaign.id, "pause")}
+                              disabled={isActioning}
+                              title="Pausar"
+                            >
+                              <Pause className="h-4 w-4" />
+                            </Button>
+                          ) : campaign.status === "PAUSED" ? (
+                            <Button
+                              size="sm" variant="outline"
+                              onClick={() => handleAction(campaign.id, "activate")}
+                              disabled={isActioning}
+                              title="Activar"
+                            >
+                              <Play className="h-4 w-4" />
+                            </Button>
+                          ) : null}
+                          {campaign.status !== "ARCHIVED" && (
+                            <Button
+                              size="sm" variant="outline"
+                              onClick={() => handleAction(campaign.id, "archive")}
+                              disabled={isActioning}
+                              title="Archivar"
+                            >
+                              <Archive className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            size="sm" variant="outline"
+                            onClick={() => handleAction(campaign.id, "delete")}
+                            disabled={isActioning}
+                            title="Eliminar"
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </CardHeader>
+
+                  {/* Metrics row */}
+                  {metrics && Object.keys(metrics).length > 0 && (
+                    <CardContent className="pt-0">
+                      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
+                        <MetricItem label="Gasto" value={`$${(parseFloat(metrics.spend) || 0).toFixed(2)}`} />
+                        <MetricItem label="Impresiones" value={(parseInt(metrics.impressions) || 0).toLocaleString()} />
+                        <MetricItem label="Clicks" value={(parseInt(metrics.clicks) || 0).toLocaleString()} />
+                        <MetricItem label="CTR" value={`${(parseFloat(metrics.ctr) || 0).toFixed(2)}%`} />
+                        <MetricItem label="CPC" value={`$${(parseFloat(metrics.cpc) || 0).toFixed(2)}`} />
+                        <MetricItem label="Frecuencia" value={(parseFloat(metrics.frequency) || 0).toFixed(1)} />
+                      </div>
+                    </CardContent>
+                  )}
                 </Card>
-                {metrics && Object.keys(metrics).length > 0 && (
-                  <MetricsCard title="Metricas" metrics={metrics} />
+
+                {/* Expanded: AdSets, Ads, AI Analysis */}
+                {isExpanded && (
+                  <div className="ml-4 space-y-2">
+                    {/* AI Analysis */}
+                    {isAnalyzing && (
+                      <Card className="border-blue-200 bg-blue-50/50">
+                        <CardContent className="py-6 text-center">
+                          <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                          <p className="text-sm text-muted-foreground">Analizando campana con IA...</p>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {campaignAnalysis && (
+                      <AnalysisPanel analysis={campaignAnalysis} />
+                    )}
+
+                    {/* AdSets */}
+                    {campaign.adSets.map((adSet) => (
+                      <Card key={adSet.id} className="border-l-4 border-l-blue-300">
+                        <CardHeader className="py-3">
+                          <CardTitle className="text-sm font-medium">{adSet.name}</CardTitle>
+                          {adSet.budget && (
+                            <span className="text-xs text-muted-foreground">${adSet.budget.toFixed(2)}/dia</span>
+                          )}
+                        </CardHeader>
+                        {adSet.metrics && Object.keys(adSet.metrics as any).length > 0 && (
+                          <CardContent className="pt-0 pb-3">
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
+                              <MetricItem label="Gasto" value={`$${(parseFloat((adSet.metrics as any).spend) || 0).toFixed(2)}`} small />
+                              <MetricItem label="Impresiones" value={(parseInt((adSet.metrics as any).impressions) || 0).toLocaleString()} small />
+                              <MetricItem label="Clicks" value={(parseInt((adSet.metrics as any).clicks) || 0).toLocaleString()} small />
+                              <MetricItem label="CTR" value={`${(parseFloat((adSet.metrics as any).ctr) || 0).toFixed(2)}%`} small />
+                              <MetricItem label="CPC" value={`$${(parseFloat((adSet.metrics as any).cpc) || 0).toFixed(2)}`} small />
+                              <MetricItem label="Frecuencia" value={(parseFloat((adSet.metrics as any).frequency) || 0).toFixed(1)} small />
+                            </div>
+                          </CardContent>
+                        )}
+
+                        {/* Ads inside adset */}
+                        {adSet.ads.length > 0 && (
+                          <CardContent className="pt-0 pb-3">
+                            <div className="space-y-2">
+                              {adSet.ads.map((ad) => (
+                                <div key={ad.id} className="flex items-center gap-3 p-2 rounded bg-muted/50">
+                                  {ad.creativeUrl && (
+                                    <img src={ad.creativeUrl} alt="" className="w-10 h-10 rounded object-cover" />
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium truncate">{ad.name}</p>
+                                    {ad.metrics && Object.keys(ad.metrics as any).length > 0 && (
+                                      <p className="text-xs text-muted-foreground">
+                                        Gasto: ${(parseFloat((ad.metrics as any).spend) || 0).toFixed(2)} |
+                                        CTR: {(parseFloat((ad.metrics as any).ctr) || 0).toFixed(2)}% |
+                                        CPC: ${(parseFloat((ad.metrics as any).cpc) || 0).toFixed(2)}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <Badge variant={ad.status === "ACTIVE" ? "success" : "secondary"} className="text-xs">
+                                    {ad.status}
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
                 )}
               </div>
             );
@@ -158,5 +435,133 @@ export default function CampaignsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function MetricItem({ label, value, small }: { label: string; value: string; small?: boolean }) {
+  return (
+    <div>
+      <p className={`text-muted-foreground ${small ? "text-[10px]" : "text-xs"}`}>{label}</p>
+      <p className={`font-semibold ${small ? "text-xs" : "text-sm"}`}>{value}</p>
+    </div>
+  );
+}
+
+function AnalysisPanel({ analysis }: { analysis: any }) {
+  const scoreColor = analysis.health_score >= 70 ? "text-green-600" : analysis.health_score >= 40 ? "text-yellow-600" : "text-red-600";
+  const statusBadge = analysis.health_status === "healthy" ? "success" : analysis.health_status === "warning" ? "warning" : "destructive";
+
+  return (
+    <Card className="border-purple-200 bg-purple-50/30">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Brain className="h-5 w-5 text-purple-600" />
+            Analisis IA
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <span className={`text-2xl font-bold ${scoreColor}`}>{analysis.health_score}/100</span>
+            <Badge variant={statusBadge}>{analysis.health_status}</Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm">{analysis.summary}</p>
+
+        {/* Spend analysis */}
+        {analysis.spend_analysis && (
+          <div>
+            <h4 className="text-sm font-semibold mb-1">Gasto</h4>
+            <p className="text-xs text-muted-foreground">{analysis.spend_analysis.explanation}</p>
+          </div>
+        )}
+
+        {/* Audience analysis */}
+        {analysis.audience_analysis && (
+          <div>
+            <h4 className="text-sm font-semibold mb-1">Audiencia</h4>
+            <p className="text-xs text-muted-foreground">{analysis.audience_analysis.assessment}</p>
+            {analysis.audience_analysis.suggestions?.length > 0 && (
+              <ul className="mt-1 space-y-1">
+                {analysis.audience_analysis.suggestions.map((s: string, i: number) => (
+                  <li key={i} className="text-xs text-muted-foreground">- {s}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Creative analysis */}
+        {analysis.creative_analysis && (
+          <div>
+            <h4 className="text-sm font-semibold mb-1">Creativos</h4>
+            <p className="text-xs text-muted-foreground">{analysis.creative_analysis.assessment}</p>
+            {analysis.creative_analysis.best_performing && (
+              <p className="text-xs mt-1"><span className="text-green-600 font-medium">Mejor:</span> {analysis.creative_analysis.best_performing}</p>
+            )}
+            {analysis.creative_analysis.worst_performing && (
+              <p className="text-xs"><span className="text-red-600 font-medium">Peor:</span> {analysis.creative_analysis.worst_performing}</p>
+            )}
+          </div>
+        )}
+
+        {/* Optimization actions */}
+        {analysis.optimization_actions?.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold mb-2">Acciones Recomendadas</h4>
+            <div className="space-y-2">
+              {analysis.optimization_actions.map((action: any, i: number) => (
+                <div key={i} className="flex items-start gap-2 p-2 rounded bg-white border">
+                  <Badge variant={action.priority === "alta" ? "destructive" : action.priority === "media" ? "warning" : "secondary"} className="text-xs mt-0.5">
+                    {action.priority}
+                  </Badge>
+                  <div>
+                    <p className="text-xs font-medium">{action.action}</p>
+                    <p className="text-xs text-muted-foreground">{action.expected_impact}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Budget recommendation */}
+        {analysis.budget_recommendation && (
+          <div className="p-3 rounded bg-white border">
+            <h4 className="text-sm font-semibold mb-1">Presupuesto Recomendado</h4>
+            <div className="flex items-center gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Actual</p>
+                <p className="text-sm font-bold">${analysis.budget_recommendation.current_daily}/dia</p>
+              </div>
+              <span className="text-muted-foreground">→</span>
+              <div>
+                <p className="text-xs text-muted-foreground">Recomendado</p>
+                <p className="text-sm font-bold text-purple-600">${analysis.budget_recommendation.recommended_daily}/dia</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">{analysis.budget_recommendation.reasoning}</p>
+          </div>
+        )}
+
+        {/* Predicted improvements */}
+        {analysis.predicted_improvements && (
+          <div className="grid grid-cols-3 gap-3">
+            <div className="text-center p-2 rounded bg-white border">
+              <p className="text-xs text-muted-foreground">CTR</p>
+              <p className="text-sm font-bold text-green-600">{analysis.predicted_improvements.ctr_improvement}</p>
+            </div>
+            <div className="text-center p-2 rounded bg-white border">
+              <p className="text-xs text-muted-foreground">CPC</p>
+              <p className="text-sm font-bold text-green-600">{analysis.predicted_improvements.cpc_reduction}</p>
+            </div>
+            <div className="text-center p-2 rounded bg-white border">
+              <p className="text-xs text-muted-foreground">Conversiones</p>
+              <p className="text-sm font-bold text-green-600">{analysis.predicted_improvements.conversions_increase}</p>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

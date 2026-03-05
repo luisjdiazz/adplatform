@@ -126,3 +126,39 @@ export async function updateAdStatus(adId: string, token: string, status: "ACTIV
 export async function updateAdSetStatus(adSetId: string, token: string, status: "ACTIVE" | "PAUSED") {
   return metaApiPost(adSetId, token, { status });
 }
+
+export async function updateCampaignStatus(campaignId: string, token: string, status: "ACTIVE" | "PAUSED" | "ARCHIVED") {
+  return metaApiPost(campaignId, token, { status });
+}
+
+export async function deleteCampaign(campaignId: string, token: string) {
+  const res = await fetch(`${META_BASE_URL}/${campaignId}?access_token=${token}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`Meta API Error: ${err?.error?.message || res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function getAdSets(campaignId: string, token: string) {
+  return metaApiGet(`${campaignId}/adsets`, token, {
+    fields: "id,name,status,daily_budget,lifetime_budget,targeting,optimization_goal,billing_event,bid_strategy",
+    limit: "100",
+  });
+}
+
+export async function getAds(adSetId: string, token: string) {
+  return metaApiGet(`${adSetId}/ads`, token, {
+    fields: "id,name,status,creative{id,name,thumbnail_url,object_story_spec,asset_feed_spec}",
+    limit: "100",
+  });
+}
+
+export async function getAdInsights(adId: string, token: string) {
+  return metaApiGet(`${adId}/insights`, token, {
+    fields: "spend,impressions,clicks,ctr,cpc,actions,cost_per_action_type,frequency",
+    date_preset: "last_7d",
+  });
+}
