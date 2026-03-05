@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum AutopilotMode {
+  AUTOPILOT
+  COPILOT
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  name          String?
+  role          Role           @default(EDITOR)
+  agencyId      String?
+  agency        Agency?        @relation(fields: [agencyId], references: [id])
+  notifications Notification[]
+  autopilotLogs AutopilotLog[] @relation("ApprovedBy")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Agency {
+  id        String   @id @default(cuid())
+  name      String
+  plan      String   @default("free")
+  settings  Json     @default("{}")
+  users     User[]
+  clients   Client[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id               String             @id @default(cuid())
+  agencyId         String
+  agency           Agency             @relation(fields: [agencyId], references: [id])
+  name             String
+  slug             String             @unique
+  brandProfile     Json?
+  isActive         Boolean            @default(true)
+  metaAccounts     MetaAccount[]
+  campaigns        Campaign[]
+  creativeUploads  CreativeUpload[]
+  autopilotRules   AutopilotRule[]
+  autopilotLogs    AutopilotLog[]
+  whatsappContacts WhatsAppContact[]
+  whatsappTemplates WhatsAppTemplate[]
+  whatsappFlows    WhatsAppFlow[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
+
+model MetaAccount {
+  id           String   @id @default(cuid())
+  clientId     String
+  client       Client   @relation(fields: [clientId], references: [id])
+  adAccountId  String
+  accessToken  String
+  accountName  String?
+  syncedAt     DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([clientId, adAccountId])
+}
+
+model Campaign {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  metaId    String?  @unique
+  name      String
+  status    String   @default("DRAFT")
+  objective String?
+  budget    Float?
+  metrics   Json     @default("{}")
+  adSets    AdSet[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AdSet {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  metaId     String?  @unique
+  name       String
+  targeting  Json     @default("{}")
+  budget     Float?
+  metrics    Json     @default("{}")
+  ads        Ad[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Ad {
+  id          String   @id @default(cuid())
+  adSetId     String
+  adSet       AdSet    @relation(fields: [adSetId], references: [id])
+  metaId      String?  @unique
+  name        String
+  creativeUrl String?
+  status      String   @default("ACTIVE")
+  metrics     Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CreativeUpload {
+  id                String   @id @default(cuid())
+  clientId          String
+  client            Client   @relation(fields: [clientId], references: [id])
+  fileUrl           String
+  fileType          String
+  analysisResult    Json?
+  generatedCampaign Json?
+  launchedToMeta    Boolean  @default(false)
+  createdAt         DateTime @default(now())
+}
+
+model AutopilotRule {
+  id        String        @id @default(cuid())
+  clientId  String
+  client    Client        @relation(fields: [clientId], references: [id])
+  name      String
+  ruleType  String
+  condition Json
+  action    Json
+  mode      AutopilotMode @default(COPILOT)
+  isActive  Boolean       @default(true)
+  logs      AutopilotLog[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model AutopilotLog {
+  id              String        @id @default(cuid())
+  clientId        String
+  client          Client        @relation(fields: [clientId], references: [id])
+  ruleId          String?
+  rule            AutopilotRule? @relation(fields: [ruleId], references: [id])
+  action          String
+  reason          String
+  metaApiResponse Json?
+  approvedById    String?
+  approvedBy      User?         @relation("ApprovedBy", fields: [approvedById], references: [id])
+  createdAt       DateTime      @default(now())
+}
+
+model WhatsAppContact {
+  id           String            @id @default(cuid())
+  clientId     String
+  client       Client            @relation(fields: [clientId], references: [id])
+  phone        String
+  name         String?
+  tags         String[]
+  customFields Json              @default("{}")
+  messages     WhatsAppMessage[]
+  lastMessageAt DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([clientId, phone])
+}
+
+model WhatsAppMessage {
+  id          String           @id @default(cuid())
+  contactId   String
+  contact     WhatsAppContact  @relation(fields: [contactId], references: [id])
+  waMessageId String?          @unique
+  direction   MessageDirection
+  contentType String           @default("text")
+  content     String
+  status      String           @default("sent")
+  sentAt      DateTime         @default(now())
+}
+
+model WhatsAppTemplate {
+  id         String   @id @default(cuid())
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id])
+  name       String
+  content    String
+  category   String   @default("MARKETING")
+  metaStatus String   @default("PENDING")
+  metaId     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model WhatsAppFlow {
+  id             String   @id @default(cuid())
+  clientId       String
+  client         Client   @relation(fields: [clientId], references: [id])
+  name           String
+  triggerKeyword String
+  steps          Json
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  actionUrl String?
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+}

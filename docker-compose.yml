@@ -1,0 +1,60 @@
+version: "3.8"
+
+services:
+  adplatform-app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://adplatform:adplatform123@adplatform-db:5432/adplatform?connection_limit=5
+      - REDIS_URL=redis://adplatform-redis:6379
+      - NEXTAUTH_SECRET=dev-secret-change-in-production
+      - NEXTAUTH_URL=http://localhost:3000
+    depends_on:
+      adplatform-db:
+        condition: service_healthy
+      adplatform-redis:
+        condition: service_healthy
+    networks:
+      - adplatform-network
+
+  adplatform-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: adplatform
+      POSTGRES_PASSWORD: adplatform123
+      POSTGRES_DB: adplatform
+    ports:
+      - "5433:5432"
+    volumes:
+      - adplatform-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adplatform"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - adplatform-network
+
+  adplatform-redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6380:6379"
+    volumes:
+      - adplatform-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - adplatform-network
+
+volumes:
+  adplatform-db-data:
+  adplatform-redis-data:
+
+networks:
+  adplatform-network:
+    driver: bridge

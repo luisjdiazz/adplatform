@@ -1,0 +1,23 @@
+{
+  "name": "adplatform",
+  "services": [
+    {
+      "name": "adplatform-app",
+      "type": "app",
+      "source": { "type": "github" },
+      "build": { "type": "dockerfile" },
+      "env": "ver .env.example",
+      "domains": [{ "host": "$(EASYPANEL_DOMAIN)", "port": 3000 }]
+    },
+    {
+      "name": "adplatform-db",
+      "type": "postgres",
+      "version": "15"
+    },
+    {
+      "name": "adplatform-redis",
+      "type": "redis",
+      "version": "7"
+    }
+  ]
+}
