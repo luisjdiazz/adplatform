@@ -37,9 +37,11 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    return NextResponse.redirect(new URL(`/clients?success=meta_connected`, req.url));
+    const baseUrl = process.env.NEXTAUTH_URL || req.url;
+    return NextResponse.redirect(new URL(`/clients?success=meta_connected`, baseUrl));
   } catch (error) {
     console.error("Meta OAuth error:", error);
-    return NextResponse.redirect(new URL("/settings?error=meta_oauth_failed", req.url));
+    const baseUrl = process.env.NEXTAUTH_URL || req.url;
+    return NextResponse.redirect(new URL("/settings?error=meta_oauth_failed", baseUrl));
   }
 }

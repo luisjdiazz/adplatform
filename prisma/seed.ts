@@ -29,145 +29,55 @@ async function main() {
     },
   });
 
-  const client1 = await prisma.client.upsert({
-    where: { slug: "tienda-moda" },
-    update: {},
+  const qchulo = await prisma.client.upsert({
+    where: { slug: "qchulo" },
+    update: {
+      brandProfile: {
+        industry: "Amazon Affiliate Business",
+        tone: "Dominicano, jocoso, cercano, divertido",
+        colors: ["#FF6B00", "#232F3E", "#FEBD69"],
+        targetAudience: "Publico dominicano y latino que le gusta aprovechar ofertas en Amazon",
+        usp: "Filtramos y posteamos las mejores ofertas de Amazon con los mejores precios para nuestra comunidad",
+        country: "DO",
+        languages: ["es"],
+      },
+    },
     create: {
       agencyId: agency.id,
-      name: "Tienda de Moda MX",
-      slug: "tienda-moda",
+      name: "QChulo",
+      slug: "qchulo",
       brandProfile: {
-        industry: "Moda y Ropa",
-        tone: "Juvenil, fresco, aspiracional",
-        colors: ["#FF6B9D", "#C44569", "#F8B500"],
-        targetAudience: "Mujeres 18-35, urbanas, interesadas en tendencias",
-        usp: "Ropa de tendencia a precios accesibles con envio gratis",
+        industry: "Amazon Affiliate Business",
+        tone: "Dominicano, jocoso, cercano, divertido",
+        colors: ["#FF6B00", "#232F3E", "#FEBD69"],
+        targetAudience: "Publico dominicano y latino que le gusta aprovechar ofertas en Amazon",
+        usp: "Filtramos y posteamos las mejores ofertas de Amazon con los mejores precios para nuestra comunidad",
+        country: "DO",
+        languages: ["es"],
       },
       isActive: true,
     },
   });
 
-  const client2 = await prisma.client.upsert({
-    where: { slug: "fitness-pro" },
+  // Meta account para QChulo
+  await prisma.metaAccount.upsert({
+    where: { clientId_adAccountId: { clientId: qchulo.id, adAccountId: "1811964516053847" } },
     update: {},
     create: {
-      agencyId: agency.id,
-      name: "Fitness Pro Gym",
-      slug: "fitness-pro",
-      brandProfile: {
-        industry: "Fitness y Salud",
-        tone: "Motivacional, energetico, profesional",
-        colors: ["#00B894", "#00CEC9", "#6C5CE7"],
-        targetAudience: "Hombres y mujeres 25-45, interesados en fitness",
-        usp: "Gimnasio con entrenadores certificados y planes personalizados",
-      },
-      isActive: true,
+      clientId: qchulo.id,
+      adAccountId: "1811964516053847",
+      accessToken: "pending-oauth",
+      accountName: "QChulo Ad Account",
     },
   });
 
-  // Campanas ficticias para Tienda de Moda
-  const campaign1 = await prisma.campaign.upsert({
-    where: { metaId: "demo-campaign-1" },
-    update: {},
-    create: {
-      clientId: client1.id,
-      metaId: "demo-campaign-1",
-      name: "Venta de Verano 2025",
-      status: "ACTIVE",
-      objective: "OUTCOME_SALES",
-      budget: 500,
-      metrics: {
-        spend: 234.5,
-        impressions: 45000,
-        clicks: 1200,
-        ctr: 2.67,
-        cpc: 0.2,
-        conversions: 45,
-        cpa: 5.21,
-        roas: 4.2,
-      },
-    },
-  });
-
-  await prisma.adSet.upsert({
-    where: { metaId: "demo-adset-1" },
-    update: {},
-    create: {
-      campaignId: campaign1.id,
-      metaId: "demo-adset-1",
-      name: "Mujeres 18-25 Intereses Moda",
-      targeting: {
-        age_min: 18,
-        age_max: 25,
-        genders: [2],
-        interests: ["Fashion", "Online Shopping"],
-        geo: { countries: ["MX"] },
-      },
-      budget: 250,
-      metrics: {
-        spend: 120,
-        impressions: 25000,
-        clicks: 700,
-        conversions: 28,
-      },
-    },
-  });
-
-  await prisma.adSet.upsert({
-    where: { metaId: "demo-adset-2" },
-    update: {},
-    create: {
-      campaignId: campaign1.id,
-      metaId: "demo-adset-2",
-      name: "Mujeres 25-35 Lookalike",
-      targeting: {
-        age_min: 25,
-        age_max: 35,
-        genders: [2],
-        lookalike: { source: "purchasers", percentage: 2 },
-        geo: { countries: ["MX"] },
-      },
-      budget: 250,
-      metrics: {
-        spend: 114.5,
-        impressions: 20000,
-        clicks: 500,
-        conversions: 17,
-      },
-    },
-  });
-
-  // Campana para Fitness Pro
-  await prisma.campaign.upsert({
-    where: { metaId: "demo-campaign-2" },
-    update: {},
-    create: {
-      clientId: client2.id,
-      metaId: "demo-campaign-2",
-      name: "Promocion Enero - Inscripciones",
-      status: "ACTIVE",
-      objective: "OUTCOME_LEADS",
-      budget: 300,
-      metrics: {
-        spend: 180,
-        impressions: 32000,
-        clicks: 890,
-        ctr: 2.78,
-        cpc: 0.2,
-        conversions: 32,
-        cpa: 5.63,
-        roas: 3.1,
-      },
-    },
-  });
-
-  // Autopilot rules
+  // Autopilot rules para QChulo
   await prisma.autopilotRule.upsert({
     where: { id: "rule-pause-high-cpa" },
     update: {},
     create: {
       id: "rule-pause-high-cpa",
-      clientId: client1.id,
+      clientId: qchulo.id,
       name: "Pausar ads con CPA alto",
       ruleType: "PAUSE_AD",
       condition: { metric: "cpa", operator: "gt", value: 10 },
@@ -182,7 +92,7 @@ async function main() {
     update: {},
     create: {
       id: "rule-increase-budget",
-      clientId: client1.id,
+      clientId: qchulo.id,
       name: "Aumentar budget si ROAS alto",
       ruleType: "INCREASE_BUDGET",
       condition: { metric: "roas", operator: "gt", value: 3 },
@@ -195,7 +105,7 @@ async function main() {
   console.log("Seed completado:");
   console.log(`  - Agencia: ${agency.name}`);
   console.log(`  - Usuario: ${admin.email} (password: admin123)`);
-  console.log(`  - Clientes: ${client1.name}, ${client2.name}`);
+  console.log(`  - Cliente: ${qchulo.name}`);
 }
 
 main()
