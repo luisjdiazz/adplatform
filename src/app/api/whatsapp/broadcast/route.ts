@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { whatsappQueue } from "@/lib/queue";
+import { getWhatsappQueue } from "@/lib/queue";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No se encontraron contactos" }, { status: 400 });
   }
 
-  await whatsappQueue.add("broadcast", {
+  await getWhatsappQueue().add("broadcast", {
     contacts: contacts.map((c) => ({ id: c.id, phone: c.phone })),
     templateName,
     languageCode: languageCode || "es",

@@ -7,19 +7,36 @@ export function getRedisConnection() {
   if (!connection) {
     connection = new IORedis(process.env.REDIS_URL || "redis://localhost:6380", {
       maxRetriesPerRequest: null,
+      lazyConnect: true,
     });
   }
   return connection;
 }
 
-export const autopilotQueue = new Queue("autopilot", {
-  connection: getRedisConnection() as any,
-});
+function createQueue(name: string) {
+  return new Queue(name, {
+    connection: {
+      url: process.env.REDIS_URL || "redis://localhost:6380",
+      lazyConnect: true,
+    } as any,
+  });
+}
 
-export const metaSyncQueue = new Queue("meta-sync", {
-  connection: getRedisConnection() as any,
-});
+let _autopilotQueue: Queue | null = null;
+let _metaSyncQueue: Queue | null = null;
+let _whatsappQueue: Queue | null = null;
 
-export const whatsappQueue = new Queue("whatsapp", {
-  connection: getRedisConnection() as any,
-});
+export function getAutopilotQueue() {
+  if (!_autopilotQueue) _autopilotQueue = createQueue("autopilot");
+  return _autopilotQueue;
+}
+
+export function getMetaSyncQueue() {
+  if (!_metaSyncQueue) _metaSyncQueue = createQueue("meta-sync");
+  return _metaSyncQueue;
+}
+
+export function getWhatsappQueue() {
+  if (!_whatsappQueue) _whatsappQueue = createQueue("whatsapp");
+  return _whatsappQueue;
+}
