@@ -130,9 +130,13 @@ export default function ClientsPage() {
                   <span>{client._count?.metaAccounts || 0} cuentas Meta</span>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => connectMeta(client.id)}>
-                    <ExternalLink className="mr-1 h-3 w-3" /> Conectar Meta
-                  </Button>
+                  {(client._count?.metaAccounts || 0) > 0 ? (
+                    <Badge variant="success">Meta conectado</Badge>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => connectMeta(client.id)}>
+                      <ExternalLink className="mr-1 h-3 w-3" /> Conectar Meta
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

@@ -1,39 +1,127 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+"use client";
+
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { MetricsCard } from "@/components/campaigns/MetricsCard";
+import { RefreshCw, Loader2 } from "lucide-react";
 
-export default async function CampaignsPage() {
-  const session = await getServerSession(authOptions);
-  const agencyId = (session?.user as any)?.agencyId;
+interface Campaign {
+  id: string;
+  name: string;
+  status: string;
+  objective: string | null;
+  budget: number | null;
+  metrics: any;
+  client: { name: string };
+  adSets: any[];
+}
 
-  const campaigns = await prisma.campaign.findMany({
-    where: { client: { agencyId } },
-    include: {
-      client: { select: { name: true } },
-      adSets: { include: { ads: true } },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+const statusColors: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
+  ACTIVE: "success",
+  PAUSED: "warning",
+  DRAFT: "secondary",
+  ARCHIVED: "destructive",
+};
 
-  const statusColors: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
-    ACTIVE: "success",
-    PAUSED: "warning",
-    DRAFT: "secondary",
-    ARCHIVED: "destructive",
-  };
+export default function CampaignsPage() {
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [selectedClient, setSelectedClient] = useState("");
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
+
+  useEffect(() => {
+    fetch("/api/clients")
+      .then((r) => r.json())
+      .then((data) => {
+        const list = data.clients || [];
+        setClients(list);
+        if (list.length > 0) setSelectedClient(list[0].id);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedClient) return;
+    setLoading(true);
+    fetch(`/api/campaigns?clientId=${selectedClient}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setCampaigns(data.campaigns || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [selectedClient]);
+
+  async function handleSync() {
+    if (!selectedClient) return;
+    setSyncing(true);
+    setSyncMessage("");
+
+    try {
+      const res = await fetch("/api/meta/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: selectedClient }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSyncMessage(`Sincronizadas ${data.synced} campanas`);
+
+      // Reload campaigns
+      const campRes = await fetch(`/api/campaigns?clientId=${selectedClient}`);
+      const campData = await campRes.json();
+      setCampaigns(campData.campaigns || []);
+    } catch (err: any) {
+      setSyncMessage(`Error: ${err.message}`);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold">Campanas</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold">Campanas</h2>
+        <div className="flex items-center gap-4">
+          <div className="w-64">
+            <Label className="text-xs text-muted-foreground">Cliente</Label>
+            <Select value={selectedClient} onValueChange={setSelectedClient}>
+              <SelectTrigger><SelectValue placeholder="Selecciona cliente" /></SelectTrigger>
+              <SelectContent>
+                {clients.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={handleSync} disabled={syncing || !selectedClient} variant="outline">
+            {syncing ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sincronizando...</>
+            ) : (
+              <><RefreshCw className="mr-2 h-4 w-4" /> Sincronizar con Meta</>
+            )}
+          </Button>
+        </div>
+      </div>
 
-      {campaigns.length === 0 ? (
+      {syncMessage && (
+        <div className={`rounded-md p-3 text-sm ${syncMessage.startsWith("Error") ? "bg-destructive/10 text-destructive" : "bg-green-50 text-green-800"}`}>
+          {syncMessage}
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-muted-foreground">Cargando campanas...</p>
+      ) : campaigns.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-muted-foreground">
-              No hay campanas. Conecta una cuenta de Meta o crea una desde Creative Analyzer.
+              No hay campanas. Dale click a "Sincronizar con Meta" para traer tus campanas.
             </p>
           </CardContent>
         </Card>
@@ -61,17 +149,8 @@ export default async function CampaignsPage() {
                     </div>
                   </CardHeader>
                 </Card>
-                <MetricsCard title="Metricas" metrics={metrics || {}} />
-                {campaign.adSets.length > 0 && (
-                  <div className="ml-6 space-y-2">
-                    {campaign.adSets.map((adSet) => (
-                      <Card key={adSet.id} className="border-l-4 border-l-primary/30">
-                        <CardHeader className="py-3">
-                          <CardTitle className="text-sm">{adSet.name}</CardTitle>
-                        </CardHeader>
-                      </Card>
-                    ))}
-                  </div>
+                {metrics && Object.keys(metrics).length > 0 && (
+                  <MetricsCard title="Metricas" metrics={metrics} />
                 )}
               </div>
             );
