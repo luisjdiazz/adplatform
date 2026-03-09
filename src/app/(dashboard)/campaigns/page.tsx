@@ -105,7 +105,7 @@ export default function CampaignsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setSyncMessage(`Sincronizadas ${data.synced} campanas con adsets y ads`);
+      setSyncMessage(`Sincronizadas ${data.synced} campanas activas con sus adsets y ads activos`);
       loadCampaigns();
     } catch (err: any) {
       setSyncMessage(`Error: ${err.message}`);

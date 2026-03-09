@@ -57,11 +57,15 @@ export async function getAdAccounts(token: string) {
   });
 }
 
-export async function getCampaigns(opts: MetaApiOptions) {
-  return metaApiGet(`act_${opts.adAccountId}/campaigns`, opts.accessToken, {
-    fields: "id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time",
+export async function getCampaigns(opts: MetaApiOptions, onlyActive = false) {
+  const params: Record<string, string> = {
+    fields: "id,name,status,effective_status,objective,daily_budget,lifetime_budget,start_time,stop_time",
     limit: "100",
-  });
+  };
+  if (onlyActive) {
+    params.filtering = JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE"] }]);
+  }
+  return metaApiGet(`act_${opts.adAccountId}/campaigns`, opts.accessToken, params);
 }
 
 export async function getCampaignInsights(campaignId: string, token: string) {
@@ -142,18 +146,26 @@ export async function deleteCampaign(campaignId: string, token: string) {
   return res.json();
 }
 
-export async function getAdSets(campaignId: string, token: string) {
-  return metaApiGet(`${campaignId}/adsets`, token, {
-    fields: "id,name,status,daily_budget,lifetime_budget,targeting,optimization_goal,billing_event,bid_strategy",
+export async function getAdSets(campaignId: string, token: string, onlyActive = false) {
+  const params: Record<string, string> = {
+    fields: "id,name,status,effective_status,daily_budget,lifetime_budget,targeting,optimization_goal,billing_event,bid_strategy",
     limit: "100",
-  });
+  };
+  if (onlyActive) {
+    params.filtering = JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE"] }]);
+  }
+  return metaApiGet(`${campaignId}/adsets`, token, params);
 }
 
-export async function getAds(adSetId: string, token: string) {
-  return metaApiGet(`${adSetId}/ads`, token, {
-    fields: "id,name,status,creative{id,name,thumbnail_url,object_story_spec,asset_feed_spec}",
+export async function getAds(adSetId: string, token: string, onlyActive = false) {
+  const params: Record<string, string> = {
+    fields: "id,name,status,effective_status,creative{id,name,thumbnail_url,object_story_spec,asset_feed_spec}",
     limit: "100",
-  });
+  };
+  if (onlyActive) {
+    params.filtering = JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE"] }]);
+  }
+  return metaApiGet(`${adSetId}/ads`, token, params);
 }
 
 export async function getAdInsights(adId: string, token: string) {

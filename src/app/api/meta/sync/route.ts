@@ -19,9 +19,16 @@ export async function POST(req: NextRequest) {
   let synced = 0;
   for (const account of metaAccounts) {
     try {
+      // Only fetch ACTIVE campaigns (truly running and spending money)
       const campaigns = await getCampaigns({
         accessToken: account.accessToken,
         adAccountId: account.adAccountId,
+      }, true);
+
+      // Mark all existing campaigns for this client as non-active before syncing
+      await prisma.campaign.updateMany({
+        where: { clientId, client: { metaAccounts: { some: { id: account.id } } } },
+        data: { status: "PAUSED" },
       });
 
       for (const camp of campaigns.data || []) {
@@ -36,7 +43,7 @@ export async function POST(req: NextRequest) {
           where: { metaId: camp.id },
           update: {
             name: camp.name,
-            status: camp.status,
+            status: camp.effective_status || camp.status,
             objective: camp.objective,
             budget: parseFloat(camp.daily_budget || camp.lifetime_budget || "0") / 100,
             metrics,
@@ -45,7 +52,7 @@ export async function POST(req: NextRequest) {
             clientId,
             metaId: camp.id,
             name: camp.name,
-            status: camp.status,
+            status: camp.effective_status || camp.status,
             objective: camp.objective,
             budget: parseFloat(camp.daily_budget || camp.lifetime_budget || "0") / 100,
             metrics,
@@ -53,9 +60,9 @@ export async function POST(req: NextRequest) {
         });
         synced++;
 
-        // Sync adsets for this campaign
+        // Only sync ACTIVE adsets
         try {
-          const adSets = await getAdSets(camp.id, account.accessToken);
+          const adSets = await getAdSets(camp.id, account.accessToken, true);
           for (const adSet of adSets.data || []) {
             let adSetMetrics = {};
             try {
@@ -81,9 +88,9 @@ export async function POST(req: NextRequest) {
               },
             });
 
-            // Sync ads for this adset
+            // Only sync ACTIVE ads
             try {
-              const ads = await getAds(adSet.id, account.accessToken);
+              const ads = await getAds(adSet.id, account.accessToken, true);
               for (const ad of ads.data || []) {
                 let adMetrics = {};
                 try {
@@ -97,7 +104,7 @@ export async function POST(req: NextRequest) {
                   where: { metaId: ad.id },
                   update: {
                     name: ad.name,
-                    status: ad.status,
+                    status: ad.effective_status || ad.status,
                     creativeUrl: thumbnailUrl,
                     metrics: adMetrics,
                   },
@@ -105,7 +112,7 @@ export async function POST(req: NextRequest) {
                     adSetId: dbAdSet.id,
                     metaId: ad.id,
                     name: ad.name,
-                    status: ad.status,
+                    status: ad.effective_status || ad.status,
                     creativeUrl: thumbnailUrl,
                     metrics: adMetrics,
                   },

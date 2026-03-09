@@ -17,7 +17,12 @@ export async function GET(req: NextRequest) {
     where,
     include: {
       client: { select: { name: true } },
-      adSets: { include: { ads: true } },
+      adSets: {
+        where: { ads: { some: { status: "ACTIVE" } } },
+        include: {
+          ads: { where: { status: "ACTIVE" } },
+        },
+      },
     },
     orderBy: { updatedAt: "desc" },
   });
