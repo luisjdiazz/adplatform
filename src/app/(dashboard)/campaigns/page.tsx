@@ -435,13 +435,26 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
   const scoreColor = analysis.health_score >= 70 ? "text-green-600" : analysis.health_score >= 40 ? "text-yellow-600" : "text-red-600";
   const statusBadge = analysis.health_status === "healthy" ? "success" : analysis.health_status === "warning" ? "warning" : "destructive";
 
+  const verdictColors: Record<string, string> = {
+    "Excelente": "text-green-600 bg-green-50 border-green-200",
+    "Bueno": "text-blue-600 bg-blue-50 border-blue-200",
+    "Regular": "text-yellow-600 bg-yellow-50 border-yellow-200",
+    "Malo": "text-red-600 bg-red-50 border-red-200",
+  };
+
+  const keepKillColors: Record<string, string> = {
+    "Mantener": "bg-green-100 text-green-700",
+    "Optimizar": "bg-yellow-100 text-yellow-700",
+    "Pausar": "bg-red-100 text-red-700",
+  };
+
   return (
     <Card className="border-purple-200 bg-purple-50/30">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <Brain className="h-5 w-5 text-purple-600" />
-            Analisis IA
+            Analisis IA (Datos en Vivo)
           </CardTitle>
           <div className="flex items-center gap-2">
             <span className={`text-2xl font-bold ${scoreColor}`}>{analysis.health_score}/100</span>
@@ -452,17 +465,40 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
       <CardContent className="space-y-4">
         <p className="text-sm">{analysis.summary}</p>
 
+        {/* Spend Analysis */}
         {analysis.spend_analysis && (
-          <div>
-            <h4 className="text-sm font-semibold mb-1">Gasto</h4>
+          <div className="p-3 rounded bg-white border">
+            <h4 className="text-sm font-semibold mb-2">Gasto</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-2">
+              <div>
+                <p className="text-[10px] text-muted-foreground">Total 7 dias</p>
+                <p className="text-sm font-bold">{analysis.spend_analysis.total_7d}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">Promedio diario real</p>
+                <p className="text-sm font-bold">{analysis.spend_analysis.avg_daily_real}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">Budget configurado</p>
+                <p className="text-sm font-bold">{analysis.spend_analysis.budget_configured}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">Utilizacion</p>
+                <p className="text-sm font-bold">{analysis.spend_analysis.budget_utilization}</p>
+              </div>
+            </div>
             <p className="text-xs text-muted-foreground">{analysis.spend_analysis.explanation}</p>
           </div>
         )}
 
+        {/* Audience */}
         {analysis.audience_analysis && (
           <div>
             <h4 className="text-sm font-semibold mb-1">Audiencia</h4>
             <p className="text-xs text-muted-foreground">{analysis.audience_analysis.assessment}</p>
+            {analysis.audience_analysis.frequency_warning && (
+              <p className="text-xs text-red-600 font-medium mt-1">Frecuencia alta — la audiencia se esta saturando.</p>
+            )}
             {analysis.audience_analysis.suggestions?.length > 0 && (
               <ul className="mt-1 space-y-1">
                 {analysis.audience_analysis.suggestions.map((s: string, i: number) => (
@@ -473,19 +509,70 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
           </div>
         )}
 
+        {/* Per-Creative Analysis */}
         {analysis.creative_analysis && (
           <div>
-            <h4 className="text-sm font-semibold mb-1">Creativos</h4>
-            <p className="text-xs text-muted-foreground">{analysis.creative_analysis.assessment}</p>
-            {analysis.creative_analysis.best_performing && (
-              <p className="text-xs mt-1"><span className="text-green-600 font-medium">Mejor:</span> {analysis.creative_analysis.best_performing}</p>
+            <h4 className="text-sm font-semibold mb-2">Analisis por Creativo</h4>
+            <p className="text-xs text-muted-foreground mb-3">{analysis.creative_analysis.overall_assessment}</p>
+
+            {analysis.creative_analysis.per_creative?.length > 0 && (
+              <div className="space-y-3">
+                {analysis.creative_analysis.per_creative.map((c: any, i: number) => (
+                  <div key={i} className={`p-3 rounded border ${verdictColors[c.verdict] || "bg-gray-50 border-gray-200"}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold">{c.name}</span>
+                        <Badge variant="outline" className="text-[10px]">{c.type}</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold">{c.verdict}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${keepKillColors[c.keep_or_kill] || "bg-gray-100"}`}>
+                          {c.keep_or_kill}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-2">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Gasto 7d</p>
+                        <p className="text-xs font-semibold">{c.spend_7d}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Diario prom.</p>
+                        <p className="text-xs font-semibold">{c.avg_daily_spend}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">CTR</p>
+                        <p className="text-xs font-semibold">{c.ctr}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">CPC</p>
+                        <p className="text-xs font-semibold">{c.cpc}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Frecuencia</p>
+                        <p className="text-xs font-semibold">{c.frequency}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground"><span className="font-medium">Mejorar:</span> {c.what_to_improve}</p>
+                  </div>
+                ))}
+              </div>
             )}
-            {analysis.creative_analysis.worst_performing && (
-              <p className="text-xs"><span className="text-red-600 font-medium">Peor:</span> {analysis.creative_analysis.worst_performing}</p>
+
+            {analysis.creative_analysis.new_creative_suggestions?.length > 0 && (
+              <div className="mt-3 p-3 rounded bg-green-50 border border-green-200">
+                <h5 className="text-xs font-semibold text-green-800 mb-1">Ideas para Nuevos Creativos</h5>
+                <ul className="space-y-1">
+                  {analysis.creative_analysis.new_creative_suggestions.map((s: string, i: number) => (
+                    <li key={i} className="text-xs text-green-700">- {s}</li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
         )}
 
+        {/* Optimization Actions */}
         {analysis.optimization_actions?.length > 0 && (
           <div>
             <h4 className="text-sm font-semibold mb-2">Acciones Recomendadas</h4>
@@ -505,6 +592,7 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
           </div>
         )}
 
+        {/* Budget Recommendation */}
         {analysis.budget_recommendation && (
           <div className="p-3 rounded bg-white border">
             <h4 className="text-sm font-semibold mb-1">Presupuesto Recomendado</h4>
@@ -523,6 +611,7 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
           </div>
         )}
 
+        {/* Predicted Improvements */}
         {analysis.predicted_improvements && (
           <div className="grid grid-cols-3 gap-3">
             <div className="text-center p-2 rounded bg-white border">

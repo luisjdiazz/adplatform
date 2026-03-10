@@ -70,14 +70,23 @@ export async function getCampaigns(opts: MetaApiOptions, onlyActive = false) {
 
 export async function getCampaignInsights(campaignId: string, token: string) {
   return metaApiGet(`${campaignId}/insights`, token, {
-    fields: "spend,impressions,clicks,ctr,cpc,actions,cost_per_action_type,frequency",
+    fields: "spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,conversions,cost_per_conversion",
     date_preset: "last_7d",
+  });
+}
+
+// Daily breakdown for accurate per-day analysis
+export async function getCampaignInsightsDaily(campaignId: string, token: string) {
+  return metaApiGet(`${campaignId}/insights`, token, {
+    fields: "spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type",
+    date_preset: "last_7d",
+    time_increment: "1",
   });
 }
 
 export async function getAdSetInsights(adSetId: string, token: string) {
   return metaApiGet(`${adSetId}/insights`, token, {
-    fields: "spend,impressions,clicks,ctr,cpc,actions,cost_per_action_type,frequency",
+    fields: "spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,conversions,cost_per_conversion",
     date_preset: "last_7d",
   });
 }
@@ -159,7 +168,7 @@ export async function getAdSets(campaignId: string, token: string, onlyActive = 
 
 export async function getAds(adSetId: string, token: string, onlyActive = false) {
   const params: Record<string, string> = {
-    fields: "id,name,status,effective_status,creative{id,name,thumbnail_url,object_story_spec,asset_feed_spec}",
+    fields: "id,name,status,effective_status,creative{id,name,title,body,thumbnail_url,object_story_spec,asset_feed_spec,image_url,video_id}",
     limit: "100",
   };
   if (onlyActive) {
@@ -170,7 +179,16 @@ export async function getAds(adSetId: string, token: string, onlyActive = false)
 
 export async function getAdInsights(adId: string, token: string) {
   return metaApiGet(`${adId}/insights`, token, {
-    fields: "spend,impressions,clicks,ctr,cpc,actions,cost_per_action_type,frequency",
+    fields: "spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,conversions,cost_per_conversion",
     date_preset: "last_7d",
+  });
+}
+
+// Daily breakdown per ad for accurate daily spend per creative
+export async function getAdInsightsDaily(adId: string, token: string) {
+  return metaApiGet(`${adId}/insights`, token, {
+    fields: "spend,impressions,clicks,ctr,cpc,actions",
+    date_preset: "last_7d",
+    time_increment: "1",
   });
 }
