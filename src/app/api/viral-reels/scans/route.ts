@@ -127,15 +127,31 @@ async function runScanPipeline(
   // Step 1: Scrape from Apify (all content types)
   const rawItems = await scrapeViralContent(hashtags, maxResults);
 
-  // Step 2: Map and save to DB
-  const mappedItems = rawItems.map(mapApifyResult);
+  // Step 2: Map, filter for virality, and limit to requested amount
+  const allMapped = rawItems.map(mapApifyResult);
 
-  // Sort by engagement (likes + comments + shares)
-  mappedItems.sort(
-    (a, b) =>
-      b.likesCount + b.commentsCount + b.sharesCount -
-      (a.likesCount + a.commentsCount + a.sharesCount)
-  );
+  // Filter out low-engagement content (minimum virality thresholds)
+  const MIN_LIKES = 500;
+  const MIN_ENGAGEMENT = 1000; // likes + comments + shares
+  const filtered = allMapped.filter((item) => {
+    const totalEngagement = item.likesCount + item.commentsCount + item.sharesCount;
+    return item.likesCount >= MIN_LIKES && totalEngagement >= MIN_ENGAGEMENT;
+  });
+
+  // Sort: prioritize REELS first, then by engagement within each type
+  const mappedItems = filtered
+    .sort((a, b) => {
+      // Reels first, then carousels, then posts
+      const typeOrder: Record<string, number> = { REEL: 0, CAROUSEL: 1, POST: 2 };
+      const typeDiff = (typeOrder[a.contentType] ?? 2) - (typeOrder[b.contentType] ?? 2);
+      if (typeDiff !== 0) return typeDiff;
+      // Within same type, sort by engagement
+      return (
+        b.likesCount + b.commentsCount + b.sharesCount -
+        (a.likesCount + a.commentsCount + a.sharesCount)
+      );
+    })
+    .slice(0, maxResults); // Respect the user's requested limit
 
   await prisma.reelScan.update({
     where: { id: scanId },

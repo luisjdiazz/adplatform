@@ -675,19 +675,27 @@ export default function ViralContentPage() {
                     key={reel.id}
                     className="group rounded-xl border bg-card transition-all hover:border-orange-500/30"
                   >
-                    {/* Thumbnail / Rank */}
-                    <div className="relative">
+                    {/* Thumbnail / Rank — clickable to open in Instagram */}
+                    <a
+                      href={reel.instagramUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group/thumb relative block cursor-pointer"
+                    >
                       {reel.thumbnailUrl ? (
                         <img
                           src={reel.thumbnailUrl}
                           alt=""
-                          className="h-48 w-full rounded-t-xl object-cover"
+                          className="h-48 w-full rounded-t-xl object-cover transition-opacity group-hover/thumb:opacity-80"
                         />
                       ) : (
-                        <div className="flex h-48 items-center justify-center rounded-t-xl bg-muted">
+                        <div className="flex h-48 items-center justify-center rounded-t-xl bg-muted transition-colors group-hover/thumb:bg-muted/70">
                           <Play className="h-12 w-12 text-muted-foreground/30" />
                         </div>
                       )}
+                      <div className="absolute inset-0 flex items-center justify-center rounded-t-xl bg-black/0 transition-colors group-hover/thumb:bg-black/30">
+                        <ExternalLink className="h-8 w-8 text-white opacity-0 transition-opacity group-hover/thumb:opacity-100" />
+                      </div>
                       <div className="absolute left-2 top-2 flex items-center gap-1">
                         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-xs font-bold text-white">
                           {index + 1}
@@ -705,22 +713,28 @@ export default function ViralContentPage() {
                       <div className="absolute right-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-xs text-green-400">
                         {getEngagementRate(reel).toFixed(1)}% ER
                       </div>
-                    </div>
+                    </a>
 
                     {/* Content */}
                     <div className="p-4">
-                      {/* Username */}
+                      {/* Username — clickable to Instagram */}
                       <div className="mb-2 flex items-center justify-between">
-                        <span className="text-sm font-medium text-orange-400">
-                          @{reel.ownerUsername || "unknown"}
-                        </span>
                         <a
                           href={reel.instagramUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-muted-foreground transition-colors hover:text-foreground"
+                          className="text-sm font-medium text-orange-400 hover:underline"
                         >
-                          <ExternalLink className="h-4 w-4" />
+                          @{reel.ownerUsername || "unknown"}
+                        </a>
+                        <a
+                          href={reel.instagramUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 rounded-full bg-pink-600/20 px-2 py-0.5 text-xs text-pink-400 transition-colors hover:bg-pink-600/30"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Ver en IG
                         </a>
                       </div>
 

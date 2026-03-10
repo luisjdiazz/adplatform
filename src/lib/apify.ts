@@ -100,12 +100,15 @@ export async function scrapeViralContent(
       `https://www.instagram.com/explore/tags/${tag.replace("#", "").trim()}/`
   );
 
+  // resultsLimit is PER URL, so divide by number of hashtags to respect total limit
+  const perUrlLimit = Math.max(3, Math.ceil(maxResults / directUrls.length));
+
   const input = {
     directUrls,
     resultsType: "posts",
-    resultsLimit: maxResults,
+    resultsLimit: perUrlLimit,
     searchType: "hashtag",
-    searchLimit: maxResults,
+    searchLimit: perUrlLimit,
     addParentData: false,
   };
 
