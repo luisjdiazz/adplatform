@@ -14,6 +14,9 @@ COPY . .
 ENV NODE_OPTIONS="--max-old-space-size=512"
 RUN npx prisma generate
 RUN npm run build
+# Bundle the autopilot worker into a single file
+RUN npx tsx --version > /dev/null 2>&1 || true
+RUN npx esbuild workers/autopilot.worker.ts --bundle --platform=node --outfile=worker.js --external:@prisma/client --external:bullmq --external:ioredis
 
 # Stage 3: Runner
 FROM node:20-alpine AS runner
@@ -30,10 +33,26 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Worker deps (bullmq, ioredis and their subdependencies)
+COPY --from=deps /prod_node_modules/bullmq ./node_modules/bullmq
+COPY --from=deps /prod_node_modules/ioredis ./node_modules/ioredis
+COPY --from=deps /prod_node_modules/cron-parser ./node_modules/cron-parser
+COPY --from=deps /prod_node_modules/glob ./node_modules/glob
+COPY --from=deps /prod_node_modules/msgpackr ./node_modules/msgpackr
+COPY --from=deps /prod_node_modules/node-abort-controller ./node_modules/node-abort-controller
+COPY --from=deps /prod_node_modules/denque ./node_modules/denque
+COPY --from=deps /prod_node_modules/lodash ./node_modules/lodash
+COPY --from=deps /prod_node_modules/cluster-key-slot ./node_modules/cluster-key-slot
+COPY --from=deps /prod_node_modules/standard-as-callback ./node_modules/standard-as-callback
+COPY --from=deps /prod_node_modules/redis-errors ./node_modules/redis-errors
+COPY --from=deps /prod_node_modules/redis-parser ./node_modules/redis-parser
+COPY --from=builder /app/worker.js ./worker.js
+COPY --from=builder /app/start.sh ./start.sh
+RUN chmod +x start.sh
 
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["sh", "start.sh"]
