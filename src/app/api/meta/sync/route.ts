@@ -19,20 +19,13 @@ export async function POST(req: NextRequest) {
   let synced = 0;
   for (const account of metaAccounts) {
     try {
-      // Only fetch ACTIVE campaigns (truly running and spending money)
+      // Fetch only ACTIVE campaigns from Meta
       const campaigns = await getCampaigns({
         accessToken: account.accessToken,
         adAccountId: account.adAccountId,
       }, true);
 
-      // Mark all existing campaigns for this client as non-active before syncing
-      await prisma.campaign.updateMany({
-        where: { clientId, client: { metaAccounts: { some: { id: account.id } } } },
-        data: { status: "PAUSED" },
-      });
-
       for (const camp of campaigns.data || []) {
-        // Get campaign insights
         let metrics = {};
         try {
           const insights = await getCampaignInsights(camp.id, account.accessToken);
@@ -60,7 +53,7 @@ export async function POST(req: NextRequest) {
         });
         synced++;
 
-        // Only sync ACTIVE adsets
+        // Sync active adsets
         try {
           const adSets = await getAdSets(camp.id, account.accessToken, true);
           for (const adSet of adSets.data || []) {
@@ -88,7 +81,7 @@ export async function POST(req: NextRequest) {
               },
             });
 
-            // Only sync ACTIVE ads
+            // Sync active ads
             try {
               const ads = await getAds(adSet.id, account.accessToken, true);
               for (const ad of ads.data || []) {

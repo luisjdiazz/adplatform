@@ -6,10 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { MetricsCard } from "@/components/campaigns/MetricsCard";
 import {
   RefreshCw, Loader2, Pause, Play, Archive, Trash2, Brain,
-  ChevronDown, ChevronUp, Filter,
+  ChevronDown, ChevronUp, DollarSign, TrendingUp, TrendingDown, Eye,
 } from "lucide-react";
 
 interface Ad {
@@ -40,19 +39,25 @@ interface Campaign {
   adSets: AdSet[];
 }
 
-const statusColors: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
-  ACTIVE: "success",
-  PAUSED: "warning",
-  DRAFT: "secondary",
-  ARCHIVED: "destructive",
-};
+function getSpend(m: any): number { return parseFloat(m?.spend) || 0; }
+function getImpressions(m: any): number { return parseInt(m?.impressions) || 0; }
+function getClicks(m: any): number { return parseInt(m?.clicks) || 0; }
+function getCtr(m: any): number { return parseFloat(m?.ctr) || 0; }
+function getCpc(m: any): number { return parseFloat(m?.cpc) || 0; }
+function getFreq(m: any): number { return parseFloat(m?.frequency) || 0; }
 
-const statusLabels: Record<string, string> = {
-  all: "Todas",
-  ACTIVE: "Activas",
-  PAUSED: "Pausadas",
-  ARCHIVED: "Archivadas",
-};
+function getPerformanceVerdict(metrics: any): { label: string; color: string; icon: any } {
+  const ctr = getCtr(metrics);
+  const cpc = getCpc(metrics);
+  const freq = getFreq(metrics);
+
+  if (ctr >= 2 && cpc < 1 && freq < 3) return { label: "Excelente", color: "text-green-600", icon: TrendingUp };
+  if (ctr >= 1 && cpc < 2) return { label: "Bien", color: "text-blue-600", icon: TrendingUp };
+  if (freq > 4) return { label: "Fatigada", color: "text-red-600", icon: TrendingDown };
+  if (ctr < 0.5) return { label: "Bajo CTR", color: "text-orange-600", icon: TrendingDown };
+  if (cpc > 3) return { label: "CPC Alto", color: "text-orange-600", icon: DollarSign };
+  return { label: "Normal", color: "text-gray-600", icon: Eye };
+}
 
 export default function CampaignsPage() {
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
@@ -61,7 +66,6 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ACTIVE");
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Record<string, any>>({});
@@ -84,7 +88,7 @@ export default function CampaignsPage() {
 
   function loadCampaigns() {
     setLoading(true);
-    fetch(`/api/campaigns?clientId=${selectedClient}`)
+    fetch(`/api/campaigns?clientId=${selectedClient}&onlySpending=true`)
       .then((r) => r.json())
       .then((data) => {
         setCampaigns(data.campaigns || []);
@@ -105,7 +109,7 @@ export default function CampaignsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setSyncMessage(`Sincronizadas ${data.synced} campanas activas con sus adsets y ads activos`);
+      setSyncMessage(`Sincronizadas ${data.synced} campanas`);
       loadCampaigns();
     } catch (err: any) {
       setSyncMessage(`Error: ${err.message}`);
@@ -115,9 +119,7 @@ export default function CampaignsPage() {
   }
 
   async function handleAction(campaignId: string, action: string) {
-    if (action === "delete" && !confirm("Seguro que quieres eliminar esta campana? Se eliminara tambien en Meta.")) {
-      return;
-    }
+    if (action === "delete" && !confirm("Seguro que quieres eliminar esta campana?")) return;
     setActionLoading(campaignId);
     try {
       const res = await fetch(`/api/campaigns/${campaignId}`, {
@@ -150,23 +152,21 @@ export default function CampaignsPage() {
     }
   }
 
-  const filtered = campaigns.filter((c) => statusFilter === "all" || c.status === statusFilter);
-
-  const activeCampaigns = campaigns.filter((c) => c.status === "ACTIVE");
-  const totalSpend = activeCampaigns.reduce((sum, c) => {
-    const m = c.metrics as any;
-    return sum + (parseFloat(m?.spend) || 0);
-  }, 0);
-  const totalImpressions = activeCampaigns.reduce((sum, c) => {
-    const m = c.metrics as any;
-    return sum + (parseInt(m?.impressions) || 0);
-  }, 0);
+  // Totals
+  const totalSpend = campaigns.reduce((sum, c) => sum + getSpend(c.metrics), 0);
+  const totalImpressions = campaigns.reduce((sum, c) => sum + getImpressions(c.metrics), 0);
+  const totalClicks = campaigns.reduce((sum, c) => sum + getClicks(c.metrics), 0);
+  const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+  const avgCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <h2 className="text-3xl font-bold">Campanas</h2>
+        <div>
+          <h2 className="text-3xl font-bold">Campanas Activas</h2>
+          <p className="text-sm text-muted-foreground">Solo campanas gastando dinero (ultimos 7 dias)</p>
+        </div>
         <div className="flex items-center gap-4 flex-wrap">
           <div className="w-48">
             <Label className="text-xs text-muted-foreground">Cliente</Label>
@@ -175,17 +175,6 @@ export default function CampaignsPage() {
               <SelectContent>
                 {clients.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-40">
-            <Label className="text-xs text-muted-foreground">Estado</Label>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {Object.entries(statusLabels).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -202,34 +191,51 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      {/* Summary cards */}
+      {/* Quick Review Summary */}
       {!loading && campaigns.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">Campanas Activas</p>
-              <p className="text-2xl font-bold">{activeCampaigns.length}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">Total Campanas</p>
-              <p className="text-2xl font-bold">{campaigns.length}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">Gasto (7 dias)</p>
-              <p className="text-2xl font-bold">${totalSpend.toFixed(2)}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">Impresiones (7 dias)</p>
-              <p className="text-2xl font-bold">{totalImpressions.toLocaleString()}</p>
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Resumen Rapido</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-5">
+              <div>
+                <p className="text-xs text-muted-foreground">Campanas Gastando</p>
+                <p className="text-2xl font-bold">{campaigns.length}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Gasto Total (7d)</p>
+                <p className="text-2xl font-bold text-red-600">${totalSpend.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Impresiones</p>
+                <p className="text-2xl font-bold">{totalImpressions.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">CTR Promedio</p>
+                <p className={`text-2xl font-bold ${avgCtr >= 1 ? "text-green-600" : "text-orange-600"}`}>
+                  {avgCtr.toFixed(2)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">CPC Promedio</p>
+                <p className={`text-2xl font-bold ${avgCpc < 1.5 ? "text-green-600" : "text-orange-600"}`}>
+                  ${avgCpc.toFixed(2)}
+                </p>
+              </div>
+            </div>
+            {/* Quick verdict */}
+            <div className="mt-3 pt-3 border-t text-sm text-muted-foreground">
+              {avgCtr >= 1.5 && avgCpc < 1.5
+                ? "Las campanas van bien — buen CTR y CPC controlado."
+                : avgCtr < 0.8
+                ? "CTR bajo — revisa los creativos y audiencias, puede que necesiten refrescarse."
+                : avgCpc > 2
+                ? "CPC alto — considera ajustar audiencias o probar nuevos creativos para bajar costos."
+                : "Rendimiento aceptable — monitorea de cerca y optimiza donde sea posible."}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {syncMessage && (
@@ -241,24 +247,28 @@ export default function CampaignsPage() {
       {/* Campaign list */}
       {loading ? (
         <p className="text-muted-foreground">Cargando campanas...</p>
-      ) : filtered.length === 0 ? (
+      ) : campaigns.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center">
+            <DollarSign className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
             <p className="text-muted-foreground">
-              {campaigns.length === 0
-                ? 'No hay campanas. Dale click a "Sincronizar" para traer tus campanas de Meta.'
-                : `No hay campanas con estado "${statusLabels[statusFilter]}".`}
+              No hay campanas gastando dinero actualmente.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Dale click a &quot;Sincronizar&quot; para actualizar desde Meta.
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
-          {filtered.map((campaign) => {
+          {campaigns.map((campaign) => {
             const metrics = campaign.metrics as any;
             const isExpanded = expandedCampaign === campaign.id;
             const campaignAnalysis = analysis[campaign.id];
             const isAnalyzing = analyzingId === campaign.id;
             const isActioning = actionLoading === campaign.id;
+            const verdict = getPerformanceVerdict(metrics);
+            const VerdictIcon = verdict.icon;
 
             return (
               <div key={campaign.id} className="space-y-2">
@@ -269,30 +279,29 @@ export default function CampaignsPage() {
                         <div className="flex items-center gap-2">
                           {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                           <CardTitle className="text-lg">{campaign.name}</CardTitle>
+                          <Badge variant="outline" className={`text-xs ${verdict.color}`}>
+                            <VerdictIcon className="h-3 w-3 mr-1" />
+                            {verdict.label}
+                          </Badge>
                         </div>
                         <div className="flex items-center gap-2 mt-1 ml-6">
                           <span className="text-xs text-muted-foreground">{campaign.client.name}</span>
-                          {campaign.budget && (
-                            <span className="text-xs text-muted-foreground">
-                              ${campaign.budget.toFixed(2)}/dia
-                            </span>
+                          {campaign.objective && (
+                            <Badge variant="secondary" className="text-xs">{campaign.objective}</Badge>
                           )}
                           {campaign.adSets.length > 0 && (
                             <span className="text-xs text-muted-foreground">
-                              {campaign.adSets.length} adsets - {campaign.adSets.reduce((s, a) => s + a.ads.length, 0)} ads
+                              {campaign.adSets.length} adsets activos - {campaign.adSets.reduce((s, a) => s + a.ads.length, 0)} ads
                             </span>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={statusColors[campaign.status] || "secondary"}>
-                          {campaign.status}
-                        </Badge>
-                        {campaign.objective && (
-                          <Badge variant="outline" className="text-xs">{campaign.objective}</Badge>
-                        )}
-                        {/* Action buttons */}
-                        <div className="flex items-center gap-1 ml-2">
+                        <div className="text-right mr-2">
+                          <p className="text-lg font-bold text-red-600">${getSpend(metrics).toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">gastado (7d)</p>
+                        </div>
+                        <div className="flex items-center gap-1">
                           <Button
                             size="sm" variant="outline"
                             onClick={() => handleAnalyze(campaign.id)}
@@ -301,7 +310,7 @@ export default function CampaignsPage() {
                           >
                             {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
                           </Button>
-                          {campaign.status === "ACTIVE" ? (
+                          {campaign.status === "ACTIVE" && (
                             <Button
                               size="sm" variant="outline"
                               onClick={() => handleAction(campaign.id, "pause")}
@@ -310,59 +319,27 @@ export default function CampaignsPage() {
                             >
                               <Pause className="h-4 w-4" />
                             </Button>
-                          ) : campaign.status === "PAUSED" ? (
-                            <Button
-                              size="sm" variant="outline"
-                              onClick={() => handleAction(campaign.id, "activate")}
-                              disabled={isActioning}
-                              title="Activar"
-                            >
-                              <Play className="h-4 w-4" />
-                            </Button>
-                          ) : null}
-                          {campaign.status !== "ARCHIVED" && (
-                            <Button
-                              size="sm" variant="outline"
-                              onClick={() => handleAction(campaign.id, "archive")}
-                              disabled={isActioning}
-                              title="Archivar"
-                            >
-                              <Archive className="h-4 w-4" />
-                            </Button>
                           )}
-                          <Button
-                            size="sm" variant="outline"
-                            onClick={() => handleAction(campaign.id, "delete")}
-                            disabled={isActioning}
-                            title="Eliminar"
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
                         </div>
                       </div>
                     </div>
                   </CardHeader>
 
                   {/* Metrics row */}
-                  {metrics && Object.keys(metrics).length > 0 && (
-                    <CardContent className="pt-0">
-                      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
-                        <MetricItem label="Gasto" value={`$${(parseFloat(metrics.spend) || 0).toFixed(2)}`} />
-                        <MetricItem label="Impresiones" value={(parseInt(metrics.impressions) || 0).toLocaleString()} />
-                        <MetricItem label="Clicks" value={(parseInt(metrics.clicks) || 0).toLocaleString()} />
-                        <MetricItem label="CTR" value={`${(parseFloat(metrics.ctr) || 0).toFixed(2)}%`} />
-                        <MetricItem label="CPC" value={`$${(parseFloat(metrics.cpc) || 0).toFixed(2)}`} />
-                        <MetricItem label="Frecuencia" value={(parseFloat(metrics.frequency) || 0).toFixed(1)} />
-                      </div>
-                    </CardContent>
-                  )}
+                  <CardContent className="pt-0">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                      <MetricItem label="Impresiones" value={getImpressions(metrics).toLocaleString()} />
+                      <MetricItem label="Clicks" value={getClicks(metrics).toLocaleString()} />
+                      <MetricItem label="CTR" value={`${getCtr(metrics).toFixed(2)}%`} good={getCtr(metrics) >= 1} />
+                      <MetricItem label="CPC" value={`$${getCpc(metrics).toFixed(2)}`} good={getCpc(metrics) < 1.5} />
+                      <MetricItem label="Frecuencia" value={getFreq(metrics).toFixed(1)} good={getFreq(metrics) < 3} />
+                    </div>
+                  </CardContent>
                 </Card>
 
                 {/* Expanded: AdSets, Ads, AI Analysis */}
                 {isExpanded && (
                   <div className="ml-4 space-y-2">
-                    {/* AI Analysis */}
                     {isAnalyzing && (
                       <Card className="border-blue-200 bg-blue-50/50">
                         <CardContent className="py-6 text-center">
@@ -372,61 +349,66 @@ export default function CampaignsPage() {
                       </Card>
                     )}
 
-                    {campaignAnalysis && (
-                      <AnalysisPanel analysis={campaignAnalysis} />
-                    )}
+                    {campaignAnalysis && <AnalysisPanel analysis={campaignAnalysis} />}
 
-                    {/* AdSets */}
-                    {campaign.adSets.map((adSet) => (
-                      <Card key={adSet.id} className="border-l-4 border-l-blue-300">
-                        <CardHeader className="py-3">
-                          <CardTitle className="text-sm font-medium">{adSet.name}</CardTitle>
-                          {adSet.budget && (
-                            <span className="text-xs text-muted-foreground">${adSet.budget.toFixed(2)}/dia</span>
+                    {campaign.adSets.map((adSet) => {
+                      const asMetrics = adSet.metrics as any;
+                      const asVerdict = getPerformanceVerdict(asMetrics);
+                      return (
+                        <Card key={adSet.id} className="border-l-4 border-l-blue-300">
+                          <CardHeader className="py-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <CardTitle className="text-sm font-medium">{adSet.name}</CardTitle>
+                                {adSet.budget && (
+                                  <span className="text-xs text-muted-foreground">${adSet.budget.toFixed(2)}/dia</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs font-medium ${asVerdict.color}`}>{asVerdict.label}</span>
+                                <span className="text-sm font-bold text-red-600">${getSpend(asMetrics).toFixed(2)}</span>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          {asMetrics && Object.keys(asMetrics).length > 0 && (
+                            <CardContent className="pt-0 pb-3">
+                              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                                <MetricItem label="Impresiones" value={getImpressions(asMetrics).toLocaleString()} small />
+                                <MetricItem label="Clicks" value={getClicks(asMetrics).toLocaleString()} small />
+                                <MetricItem label="CTR" value={`${getCtr(asMetrics).toFixed(2)}%`} small good={getCtr(asMetrics) >= 1} />
+                                <MetricItem label="CPC" value={`$${getCpc(asMetrics).toFixed(2)}`} small good={getCpc(asMetrics) < 1.5} />
+                                <MetricItem label="Frecuencia" value={getFreq(asMetrics).toFixed(1)} small good={getFreq(asMetrics) < 3} />
+                              </div>
+                            </CardContent>
                           )}
-                        </CardHeader>
-                        {adSet.metrics && Object.keys(adSet.metrics as any).length > 0 && (
-                          <CardContent className="pt-0 pb-3">
-                            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
-                              <MetricItem label="Gasto" value={`$${(parseFloat((adSet.metrics as any).spend) || 0).toFixed(2)}`} small />
-                              <MetricItem label="Impresiones" value={(parseInt((adSet.metrics as any).impressions) || 0).toLocaleString()} small />
-                              <MetricItem label="Clicks" value={(parseInt((adSet.metrics as any).clicks) || 0).toLocaleString()} small />
-                              <MetricItem label="CTR" value={`${(parseFloat((adSet.metrics as any).ctr) || 0).toFixed(2)}%`} small />
-                              <MetricItem label="CPC" value={`$${(parseFloat((adSet.metrics as any).cpc) || 0).toFixed(2)}`} small />
-                              <MetricItem label="Frecuencia" value={(parseFloat((adSet.metrics as any).frequency) || 0).toFixed(1)} small />
-                            </div>
-                          </CardContent>
-                        )}
 
-                        {/* Ads inside adset */}
-                        {adSet.ads.length > 0 && (
-                          <CardContent className="pt-0 pb-3">
-                            <div className="space-y-2">
-                              {adSet.ads.map((ad) => (
-                                <div key={ad.id} className="flex items-center gap-3 p-2 rounded bg-muted/50">
-                                  {ad.creativeUrl && (
-                                    <img src={ad.creativeUrl} alt="" className="w-10 h-10 rounded object-cover" />
-                                  )}
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium truncate">{ad.name}</p>
-                                    {ad.metrics && Object.keys(ad.metrics as any).length > 0 && (
-                                      <p className="text-xs text-muted-foreground">
-                                        Gasto: ${(parseFloat((ad.metrics as any).spend) || 0).toFixed(2)} |
-                                        CTR: {(parseFloat((ad.metrics as any).ctr) || 0).toFixed(2)}% |
-                                        CPC: ${(parseFloat((ad.metrics as any).cpc) || 0).toFixed(2)}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <Badge variant={ad.status === "ACTIVE" ? "success" : "secondary"} className="text-xs">
-                                    {ad.status}
-                                  </Badge>
-                                </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        )}
-                      </Card>
-                    ))}
+                          {adSet.ads.length > 0 && (
+                            <CardContent className="pt-0 pb-3">
+                              <div className="space-y-2">
+                                {adSet.ads.map((ad) => {
+                                  const adM = ad.metrics as any;
+                                  return (
+                                    <div key={ad.id} className="flex items-center gap-3 p-2 rounded bg-muted/50">
+                                      {ad.creativeUrl && (
+                                        <img src={ad.creativeUrl} alt="" className="w-10 h-10 rounded object-cover" />
+                                      )}
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium truncate">{ad.name}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Gasto: ${getSpend(adM).toFixed(2)} |
+                                          CTR: {getCtr(adM).toFixed(2)}% |
+                                          CPC: ${getCpc(adM).toFixed(2)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </CardContent>
+                          )}
+                        </Card>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -438,11 +420,13 @@ export default function CampaignsPage() {
   );
 }
 
-function MetricItem({ label, value, small }: { label: string; value: string; small?: boolean }) {
+function MetricItem({ label, value, small, good }: { label: string; value: string; small?: boolean; good?: boolean }) {
   return (
     <div>
       <p className={`text-muted-foreground ${small ? "text-[10px]" : "text-xs"}`}>{label}</p>
-      <p className={`font-semibold ${small ? "text-xs" : "text-sm"}`}>{value}</p>
+      <p className={`font-semibold ${small ? "text-xs" : "text-sm"} ${good !== undefined ? (good ? "text-green-600" : "text-orange-600") : ""}`}>
+        {value}
+      </p>
     </div>
   );
 }
@@ -468,7 +452,6 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
       <CardContent className="space-y-4">
         <p className="text-sm">{analysis.summary}</p>
 
-        {/* Spend analysis */}
         {analysis.spend_analysis && (
           <div>
             <h4 className="text-sm font-semibold mb-1">Gasto</h4>
@@ -476,7 +459,6 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
           </div>
         )}
 
-        {/* Audience analysis */}
         {analysis.audience_analysis && (
           <div>
             <h4 className="text-sm font-semibold mb-1">Audiencia</h4>
@@ -491,7 +473,6 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
           </div>
         )}
 
-        {/* Creative analysis */}
         {analysis.creative_analysis && (
           <div>
             <h4 className="text-sm font-semibold mb-1">Creativos</h4>
@@ -505,7 +486,6 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
           </div>
         )}
 
-        {/* Optimization actions */}
         {analysis.optimization_actions?.length > 0 && (
           <div>
             <h4 className="text-sm font-semibold mb-2">Acciones Recomendadas</h4>
@@ -525,7 +505,6 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
           </div>
         )}
 
-        {/* Budget recommendation */}
         {analysis.budget_recommendation && (
           <div className="p-3 rounded bg-white border">
             <h4 className="text-sm font-semibold mb-1">Presupuesto Recomendado</h4>
@@ -534,7 +513,7 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
                 <p className="text-xs text-muted-foreground">Actual</p>
                 <p className="text-sm font-bold">${analysis.budget_recommendation.current_daily}/dia</p>
               </div>
-              <span className="text-muted-foreground">→</span>
+              <span className="text-muted-foreground">&rarr;</span>
               <div>
                 <p className="text-xs text-muted-foreground">Recomendado</p>
                 <p className="text-sm font-bold text-purple-600">${analysis.budget_recommendation.recommended_daily}/dia</p>
@@ -544,7 +523,6 @@ function AnalysisPanel({ analysis }: { analysis: any }) {
           </div>
         )}
 
-        {/* Predicted improvements */}
         {analysis.predicted_improvements && (
           <div className="grid grid-cols-3 gap-3">
             <div className="text-center p-2 rounded bg-white border">

@@ -15,4 +15,4 @@ jobs:
         with:
           easypanel-url: ${{ secrets.EASYPANEL_URL }}
           easypanel-token: ${{ secrets.EASYPANEL_TOKEN }}
-          project-name: adplatform
+          project-name: magoadplatform
