@@ -37,7 +37,6 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=deps /prod_node_modules/bullmq ./node_modules/bullmq
 COPY --from=deps /prod_node_modules/ioredis ./node_modules/ioredis
 COPY --from=deps /prod_node_modules/cron-parser ./node_modules/cron-parser
-COPY --from=deps /prod_node_modules/glob ./node_modules/glob
 COPY --from=deps /prod_node_modules/msgpackr ./node_modules/msgpackr
 COPY --from=deps /prod_node_modules/node-abort-controller ./node_modules/node-abort-controller
 COPY --from=deps /prod_node_modules/denque ./node_modules/denque
