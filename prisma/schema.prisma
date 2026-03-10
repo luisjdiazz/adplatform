@@ -55,6 +55,7 @@ model Client {
   name             String
   slug             String             @unique
   brandProfile     Json?
+  settings         Json               @default("{}")
   isActive         Boolean            @default(true)
   metaAccounts     MetaAccount[]
   campaigns        Campaign[]
