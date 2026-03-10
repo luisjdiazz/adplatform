@@ -130,13 +130,9 @@ async function runScanPipeline(
   // Step 2: Map, filter for virality, and limit to requested amount
   const allMapped = rawItems.map(mapApifyResult);
 
-  // Filter out low-engagement content (minimum virality thresholds)
-  const MIN_LIKES = 500;
-  const MIN_ENGAGEMENT = 1000; // likes + comments + shares
-  const filtered = allMapped.filter((item) => {
-    const totalEngagement = item.likesCount + item.commentsCount + item.sharesCount;
-    return item.likesCount >= MIN_LIKES && totalEngagement >= MIN_ENGAGEMENT;
-  });
+  // Filter out very low-engagement content (keep anything with some traction)
+  const MIN_LIKES = 50;
+  const filtered = allMapped.filter((item) => item.likesCount >= MIN_LIKES);
 
   // Sort: prioritize REELS first, then by engagement within each type
   const mappedItems = filtered
