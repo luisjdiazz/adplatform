@@ -1,13 +1,12 @@
 const APIFY_API_TOKEN = process.env.APIFY_API_TOKEN;
 const APIFY_BASE_URL = "https://api.apify.com/v2";
 
-// Using apify/instagram-scraper — supports posts, reels, carousels
+// Using apify/instagram-scraper — supports posts, reels, carousels from profiles
 const ACTOR_ID = "apify~instagram-scraper";
 
 export type ContentType = "REEL" | "POST" | "CAROUSEL";
 
 interface ApifyResult {
-  // Common fields
   url?: string;
   shortCode?: string;
   ownerUsername?: string;
@@ -18,29 +17,56 @@ interface ApifyResult {
   videoPlayCount?: number;
   videoViewCount?: number;
   shareCount?: number;
-  // Type detection
   type?: string; // "Image", "Video", "Sidecar" (carousel)
   productType?: string; // "clips" = reel, "feed" = post, "carousel_container"
   isVideo?: boolean;
-  // Media
   displayUrl?: string;
   thumbnailUrl?: string;
   videoUrl?: string;
   images?: string[];
   childPosts?: { displayUrl?: string; videoUrl?: string; isVideo?: boolean }[];
   sidecarImages?: { displayUrl?: string }[];
-  // Video-specific
   videoDuration?: number;
   musicInfo?: { artist_name?: string; song_name?: string; title?: string };
-  // Metadata
   hashtags?: string[];
   timestamp?: string;
-  dimensionsHeight?: number;
-  dimensionsWidth?: number;
 }
 
+// Top viral accounts per niche — these are the SOURCE of viral content
+export const NICHE_ACCOUNTS: Record<string, string[]> = {
+  "amazon-affiliate": [
+    "amazonfinds", "amazon", "thegladgal", "meganscornerr",
+    "amazonprimevideo", "thatgirlwiththedog", "brooklynzoo_",
+    "saharan.living", "nikachic",
+  ],
+  "amazon-finds": [
+    "amazonfindsdaily_", "amazon_finds_daily", "bestofamazonfinds",
+    "amazonhomefinds", "loveamazonfinds", "amazonfindstoday",
+    "topfinds.amazon", "theamazonhunter",
+  ],
+  fashion: [
+    "zfrancescaa", "emmachamberlain", "aimeeesong", "chiaraferragni",
+    "songofstyle", "blaireadiebee", "neaborja", "brittanybathgate",
+    "angiehofficial", "pafranceschina",
+  ],
+  "clothes-store": [
+    "zfrancescaa", "revolve", "fashionnova", "shein_official",
+    "boohoo", "aritzia", "princesspolly", "whitefoxboutique",
+    "ohpolly", "beginningboutique",
+  ],
+  "hair-salon": [
+    "hairby_chrissy", "guy_tang", "balaborgesz", "hairbesties_",
+    "samvillahair", "tresemme", "olaplex", "ghdhair",
+    "behindthechair_com", "hairbrained_official",
+  ],
+  "real-estate": [
+    "luxurylistings", "theagencyre", "milliondollarlisting",
+    "rfrancischi", "sellingtheoc", "ryanflag", "jasonoppenheim",
+    "thebossharper", "luxuryhomesint", "zillow",
+  ],
+};
+
 function detectContentType(item: ApifyResult): ContentType {
-  // Sidecar = carousel
   if (
     item.type === "Sidecar" ||
     item.productType === "carousel_container" ||
@@ -49,7 +75,6 @@ function detectContentType(item: ApifyResult): ContentType {
   ) {
     return "CAROUSEL";
   }
-  // Clips = reel
   if (
     item.productType === "clips" ||
     item.type === "Video" ||
@@ -63,7 +88,6 @@ function detectContentType(item: ApifyResult): ContentType {
 function extractMediaUrls(item: ApifyResult): string[] {
   const urls: string[] = [];
 
-  // Carousel images
   if (item.childPosts?.length) {
     for (const child of item.childPosts) {
       if (child.displayUrl) urls.push(child.displayUrl);
@@ -78,7 +102,6 @@ function extractMediaUrls(item: ApifyResult): string[] {
     urls.push(...item.images);
   }
 
-  // Main image/thumbnail
   if (urls.length === 0 && item.displayUrl) {
     urls.push(item.displayUrl);
   }
@@ -86,29 +109,31 @@ function extractMediaUrls(item: ApifyResult): string[] {
   return urls;
 }
 
+/**
+ * Scrape viral content from top accounts in a niche.
+ * Instead of hashtags (which return recent 0-engagement posts),
+ * we scrape known viral accounts to get content with real engagement.
+ */
 export async function scrapeViralContent(
-  hashtags: string[],
+  accounts: string[],
   maxResults: number = 30
 ): Promise<ApifyResult[]> {
   if (!APIFY_API_TOKEN) {
     throw new Error("APIFY_API_TOKEN no esta configurado");
   }
 
-  // Build hashtag explore URLs
-  const directUrls = hashtags.map(
-    (tag) =>
-      `https://www.instagram.com/explore/tags/${tag.replace("#", "").trim()}/`
+  // Build profile URLs from account usernames
+  const directUrls = accounts.map(
+    (username) => `https://www.instagram.com/${username.replace("@", "").trim()}/`
   );
 
-  // resultsLimit is PER URL, so divide by number of hashtags to respect total limit
-  const perUrlLimit = Math.max(3, Math.ceil(maxResults / directUrls.length));
+  // Get latest posts from each account (limit per profile)
+  const perProfileLimit = Math.max(3, Math.ceil((maxResults * 2) / directUrls.length));
 
   const input = {
     directUrls,
     resultsType: "posts",
-    resultsLimit: perUrlLimit,
-    searchType: "hashtag",
-    searchLimit: perUrlLimit,
+    resultsLimit: perProfileLimit,
     addParentData: false,
   };
 
@@ -131,8 +156,8 @@ export async function scrapeViralContent(
   const runId = runData.data?.id;
   if (!runId) throw new Error("No se obtuvo runId de Apify");
 
-  // Poll for completion (max 8 minutes for larger scrapes)
-  const maxWait = 8 * 60 * 1000;
+  // Poll for completion (max 10 minutes)
+  const maxWait = 10 * 60 * 1000;
   const start = Date.now();
 
   while (Date.now() - start < maxWait) {
@@ -190,6 +215,6 @@ export function mapApifyResult(item: ApifyResult) {
   };
 }
 
-// Keep backward-compatible exports
+// Backward-compatible exports
 export const scrapeViralReels = scrapeViralContent;
 export const mapApifyReel = mapApifyResult;

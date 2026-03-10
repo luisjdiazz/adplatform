@@ -2,38 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { scrapeViralContent, mapApifyResult } from "@/lib/apify";
+import { scrapeViralContent, mapApifyResult, NICHE_ACCOUNTS } from "@/lib/apify";
 import { analyzeViralReels } from "@/lib/anthropic";
-
-// Predefined niches with default hashtags
-const NICHE_PRESETS: Record<string, string[]> = {
-  "amazon-affiliate": [
-    "amazonfinds", "amazonfavorites", "amazonmusthaves", "amazonhaul",
-    "amazoninfluencer", "founditonamazon", "amazondeals", "tiktokmademebuyit",
-  ],
-  "amazon-finds": [
-    "amazonfinds", "amazonfind", "amazonfinds2026", "amazonhome",
-    "amazonkitchen", "amazongadgets", "amazonfashionfinds", "amazonbeautyfinds",
-  ],
-  fashion: [
-    "fashion", "ootd", "style", "outfitinspo", "fashionreels",
-    "streetstyle", "fashiontiktok", "whatiwore", "grwm", "styleinspo",
-  ],
-  "clothes-store": [
-    "boutique", "tiendaderopa", "clothingbrand", "shopsmall",
-    "newcollection", "fashionstore", "ropademujer", "outfitoftheday",
-  ],
-  "hair-salon": [
-    "hairstylist", "hairsalon", "hairtransformation", "balayage",
-    "haircolor", "peluqueria", "hairstyle", "beforeandafter",
-    "blondehair", "haircare",
-  ],
-  "real-estate": [
-    "realestate", "realtor", "luxuryhomes", "househunting",
-    "dreamhome", "propertytour", "realestatetiktok", "hometour",
-    "bienesinmuebles", "realtorlife",
-  ],
-};
 
 // GET - list all scans for the agency
 export async function GET(req: NextRequest) {
@@ -61,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     scans,
-    nichePresets: Object.keys(NICHE_PRESETS),
+    nichePresets: Object.keys(NICHE_ACCOUNTS),
   });
 }
 
@@ -74,38 +44,39 @@ export async function POST(req: NextRequest) {
 
   const agencyId = (session.user as any).agencyId;
   const body = await req.json();
-  const { niche, hashtags: customHashtags, clientId, maxResults = 30 } = body;
+  const { niche, extraAccounts, clientId, maxResults = 30 } = body;
 
   if (!niche) {
     return NextResponse.json({ error: "Niche es requerido" }, { status: 400 });
   }
 
-  // Merge preset hashtags with any custom ones
-  const presetHashtags = NICHE_PRESETS[niche] || [];
-  const hashtags = [
-    ...new Set([...presetHashtags, ...(customHashtags || [])]),
+  // Get preset accounts for the niche + any custom ones
+  const presetAccounts = NICHE_ACCOUNTS[niche] || [];
+  const extra = (extraAccounts || []) as string[];
+  const accounts = [
+    ...new Set([...presetAccounts, ...extra.map((a: string) => a.replace("@", "").trim()).filter(Boolean)]),
   ];
 
-  if (hashtags.length === 0) {
+  if (accounts.length === 0) {
     return NextResponse.json(
-      { error: "Se necesita al menos un hashtag" },
+      { error: "Se necesita al menos una cuenta para escanear" },
       { status: 400 }
     );
   }
 
-  // Create the scan record
+  // Create the scan record (store account names in hashtags field for now)
   const scan = await prisma.reelScan.create({
     data: {
       agencyId,
       clientId: clientId || null,
       niche,
-      hashtags,
+      hashtags: accounts, // reusing field to store account names
       status: "SCRAPING",
     },
   });
 
-  // Run scraping in background (don't await in response)
-  runScanPipeline(scan.id, hashtags, niche, maxResults, clientId).catch(
+  // Run scraping in background
+  runScanPipeline(scan.id, accounts, niche, maxResults, clientId).catch(
     (err) => {
       console.error(`Scan ${scan.id} failed:`, err);
       prisma.reelScan
@@ -119,35 +90,29 @@ export async function POST(req: NextRequest) {
 
 async function runScanPipeline(
   scanId: string,
-  hashtags: string[],
+  accounts: string[],
   niche: string,
   maxResults: number,
   clientId?: string
 ) {
-  // Step 1: Scrape from Apify (all content types)
-  const rawItems = await scrapeViralContent(hashtags, maxResults);
+  // Step 1: Scrape from viral accounts via Apify
+  const rawItems = await scrapeViralContent(accounts, maxResults);
 
-  // Step 2: Map, filter for virality, and limit to requested amount
+  // Step 2: Map to our format
   const allMapped = rawItems.map(mapApifyResult);
 
-  // Filter out very low-engagement content (keep anything with some traction)
-  const MIN_LIKES = 50;
-  const filtered = allMapped.filter((item) => item.likesCount >= MIN_LIKES);
-
-  // Sort: prioritize REELS first, then by engagement within each type
-  const mappedItems = filtered
+  // Sort: by engagement (likes + comments), reels first
+  const mappedItems = allMapped
     .sort((a, b) => {
-      // Reels first, then carousels, then posts
+      // Primary: total engagement descending
+      const engA = a.likesCount + a.commentsCount + a.sharesCount;
+      const engB = b.likesCount + b.commentsCount + b.sharesCount;
+      if (engB !== engA) return engB - engA;
+      // Tiebreaker: reels > carousels > posts
       const typeOrder: Record<string, number> = { REEL: 0, CAROUSEL: 1, POST: 2 };
-      const typeDiff = (typeOrder[a.contentType] ?? 2) - (typeOrder[b.contentType] ?? 2);
-      if (typeDiff !== 0) return typeDiff;
-      // Within same type, sort by engagement
-      return (
-        b.likesCount + b.commentsCount + b.sharesCount -
-        (a.likesCount + a.commentsCount + a.sharesCount)
-      );
+      return (typeOrder[a.contentType] ?? 2) - (typeOrder[b.contentType] ?? 2);
     })
-    .slice(0, maxResults); // Respect the user's requested limit
+    .slice(0, maxResults);
 
   await prisma.reelScan.update({
     where: { id: scanId },
@@ -157,10 +122,7 @@ async function runScanPipeline(
   // Save content to DB
   for (const item of mappedItems) {
     await prisma.viralReel.create({
-      data: {
-        scanId,
-        ...item,
-      },
+      data: { scanId, ...item },
     });
   }
 

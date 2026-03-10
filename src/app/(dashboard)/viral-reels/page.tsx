@@ -72,7 +72,7 @@ export default function ViralContentPage() {
 
   // New scan form
   const [selectedNiche, setSelectedNiche] = useState("");
-  const [customHashtags, setCustomHashtags] = useState("");
+  const [extraAccounts, setExtraAccounts] = useState("");
   const [maxResults, setMaxResults] = useState(30);
 
   // Content type filter
@@ -118,9 +118,9 @@ export default function ViralContentPage() {
     if (!selectedNiche) return;
     setScanLoading(true);
     try {
-      const extra = customHashtags
+      const extra = extraAccounts
         .split(",")
-        .map((h) => h.trim().replace("#", ""))
+        .map((a) => a.trim().replace("@", ""))
         .filter(Boolean);
 
       const res = await fetch("/api/viral-reels/scans", {
@@ -128,7 +128,7 @@ export default function ViralContentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           niche: selectedNiche,
-          hashtags: extra,
+          extraAccounts: extra,
           clientId: selectedClient || undefined,
           maxResults,
         }),
@@ -142,7 +142,7 @@ export default function ViralContentPage() {
 
       await loadScans();
       setActiveTab("history");
-      setCustomHashtags("");
+      setExtraAccounts("");
     } catch (err) {
       alert("Error de conexion");
     } finally {
@@ -312,12 +312,12 @@ export default function ViralContentPage() {
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">
-                Hashtags extra (separados por coma)
+                Cuentas extra (separadas por coma)
               </Label>
               <Input
-                placeholder="ej: santodomingo, rd, caribefood"
-                value={customHashtags}
-                onChange={(e) => setCustomHashtags(e.target.value)}
+                placeholder="ej: @fashionnova, @revolve"
+                value={extraAccounts}
+                onChange={(e) => setExtraAccounts(e.target.value)}
               />
             </div>
             <div>
@@ -353,19 +353,11 @@ export default function ViralContentPage() {
           </div>
           {selectedNiche && (
             <p className="mt-3 text-xs text-muted-foreground">
-              Hashtags incluidos:{" "}
-              {[
-                ...(NICHE_OPTIONS.find((n) => n.value === selectedNiche)
-                  ? [selectedNiche]
-                  : []),
-                ...customHashtags
-                  .split(",")
-                  .map((h) => h.trim())
-                  .filter(Boolean),
-              ]
-                .map((h) => `#${h}`)
-                .join(" ")}
-              {" + defaults del nicho"}
+              Escaneando las cuentas mas virales del nicho{" "}
+              <span className="font-medium text-orange-400">
+                {NICHE_OPTIONS.find((n) => n.value === selectedNiche)?.label || selectedNiche}
+              </span>
+              {extraAccounts.trim() && " + cuentas extra"}
             </p>
           )}
         </div>
