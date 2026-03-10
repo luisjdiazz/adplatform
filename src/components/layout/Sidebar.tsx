@@ -10,6 +10,7 @@ import {
   BarChart3,
   Bot,
   MessageSquare,
+  Flame,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/campaigns", label: "Campanas", icon: BarChart3 },
   { href: "/autopilot", label: "AI Trafficker", icon: Bot },
   { href: "/whatsapp", label: "WhatsApp CRM", icon: MessageSquare },
+  { href: "/viral-reels", label: "Viral Content", icon: Flame },
   { href: "/settings", label: "Configuracion", icon: Settings },
 ];
 

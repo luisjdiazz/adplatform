@@ -145,6 +145,187 @@ Responde SIEMPRE en formato JSON con esta estructura exacta:
   return JSON.parse(jsonMatch[0]);
 }
 
+export async function analyzeViralReels(
+  reelsData: Record<string, any>[],
+  niche: string,
+  brandProfile?: Record<string, any>
+) {
+  const brandContext = brandProfile
+    ? `\nPerfil de marca del cliente:\n- Industria: ${brandProfile.industry}\n- Tono: ${brandProfile.tone}\n- Publico objetivo: ${brandProfile.targetAudience}`
+    : "";
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 4000,
+    messages: [
+      {
+        role: "user",
+        content: `Eres un experto en marketing viral de Instagram Reels. Analiza los siguientes reels virales del nicho "${niche}" y extrae patrones accionables.${brandContext}
+
+Datos de ${reelsData.length} reels encontrados:
+${JSON.stringify(reelsData.map((r) => ({
+  caption: r.caption?.substring(0, 300),
+  likes: r.likesCount,
+  comments: r.commentsCount,
+  views: r.viewsCount,
+  shares: r.sharesCount,
+  duration: r.duration,
+  music: r.musicName,
+  hashtags: r.hashtags?.slice(0, 10),
+  username: r.ownerUsername,
+})), null, 2)}
+
+Responde SIEMPRE en formato JSON con esta estructura exacta:
+{
+  "resumen": "resumen ejecutivo de lo que se encontro en 2-3 oraciones",
+  "patrones_virales": [
+    {
+      "patron": "nombre del patron identificado",
+      "descripcion": "explicacion detallada de por que funciona",
+      "frecuencia": "en cuantos reels se observo (ej: 8 de 30)",
+      "ejemplo_caption": "ejemplo real de los datos"
+    }
+  ],
+  "hooks_efectivos": [
+    {
+      "tipo": "tipo de hook (pregunta, dato impactante, antes/despues, etc)",
+      "ejemplo": "ejemplo concreto extraido de los reels",
+      "por_que_funciona": "explicacion psicologica/marketing"
+    }
+  ],
+  "formatos_ganadores": [
+    {
+      "formato": "nombre del formato (tutorial, storytelling, POV, etc)",
+      "duracion_ideal": "rango de duracion en segundos",
+      "engagement_promedio": "likes/views ratio aproximado"
+    }
+  ],
+  "hashtags_top": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5"],
+  "musica_trending": ["cancion1", "cancion2", "cancion3"],
+  "mejores_cuentas": [
+    {
+      "username": "@cuenta",
+      "por_que": "que hacen bien"
+    }
+  ],
+  "recomendaciones_contenido": [
+    {
+      "idea": "idea concreta de reel para crear",
+      "formato": "formato sugerido",
+      "hook": "hook sugerido para abrir",
+      "cta": "call to action sugerido",
+      "mejor_horario": "horario sugerido de publicacion"
+    }
+  ],
+  "metricas_benchmark": {
+    "views_promedio": 0,
+    "likes_promedio": 0,
+    "engagement_rate_promedio": "0%",
+    "duracion_promedio_segundos": 0
+  }
+}`,
+      },
+    ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No se pudo parsear la respuesta de Claude");
+  return JSON.parse(jsonMatch[0]);
+}
+
+export async function remixViralReel(
+  reelData: Record<string, any>,
+  clientName: string,
+  brandProfile?: Record<string, any>,
+  customInstructions?: string
+) {
+  const brandContext = brandProfile
+    ? `\nPerfil de marca de "${clientName}":\n- Industria: ${brandProfile.industry || "no especificada"}\n- Tono: ${brandProfile.tone || "no especificado"}\n- Publico objetivo: ${brandProfile.targetAudience || "no especificado"}\n- Colores de marca: ${brandProfile.colors?.join(", ") || "no especificados"}\n- Propuesta de valor: ${brandProfile.usp || "no especificada"}`
+    : clientName
+      ? `\nCliente: ${clientName} (sin perfil de marca definido, genera ideas genericas adaptables)`
+      : "\nNo hay cliente especifico - genera ideas genericas para cualquier marca en este nicho";
+
+  const customContext = customInstructions
+    ? `\n\nInstrucciones adicionales del usuario:\n${customInstructions}`
+    : "";
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 3000,
+    messages: [
+      {
+        role: "user",
+        content: `Eres un experto en contenido viral de Instagram y creatividad publicitaria. Tu trabajo es tomar un reel viral exitoso y crear una version adaptada/remixada para una marca especifica.
+
+Datos del reel viral original:
+- Nicho: ${reelData.niche}
+- Caption: ${reelData.caption || "sin caption"}
+- Likes: ${reelData.likesCount?.toLocaleString()}
+- Comentarios: ${reelData.commentsCount?.toLocaleString()}
+- Views: ${reelData.viewsCount?.toLocaleString()}
+- Shares: ${reelData.sharesCount?.toLocaleString()}
+- Duracion: ${reelData.duration ? reelData.duration + "s" : "desconocida"}
+- Musica: ${reelData.musicName || "desconocida"}
+- Hashtags: ${reelData.hashtags?.join(", ") || "ninguno"}
+- Cuenta original: @${reelData.ownerUsername || "desconocida"}
+${brandContext}${customContext}
+
+Analiza POR QUE este reel se hizo viral y genera un remix adaptado. Responde SIEMPRE en formato JSON con esta estructura exacta:
+{
+  "viral_analysis": {
+    "why_it_worked": "explicacion de 2-3 oraciones de por que este reel se hizo viral",
+    "hook_type": "tipo de hook usado (pregunta, dato impactante, visual shock, storytelling, etc)",
+    "emotional_trigger": "emocion principal que activa (curiosidad, aspiracion, humor, miedo, etc)",
+    "engagement_score": 8.5
+  },
+  "remix_concept": {
+    "title": "titulo corto del concepto remixado",
+    "format": "tutorial | storytelling | POV | antes-despues | trend-adaptation | behind-scenes | tips-listicle",
+    "description": "descripcion detallada de como ejecutar el reel remixado paso a paso",
+    "duration_seconds": 30,
+    "scenes": [
+      {
+        "time": "0-3s",
+        "visual": "que se muestra",
+        "text_overlay": "texto en pantalla si aplica",
+        "audio": "que se escucha"
+      }
+    ]
+  },
+  "copy": {
+    "hook_opening": "la primera frase/visual que captura atencion (los primeros 1-2 segundos)",
+    "caption": "caption completo sugerido con emojis y CTA",
+    "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5"],
+    "cta": "call to action especifico"
+  },
+  "production_tips": {
+    "music_suggestion": "tipo de musica o cancion trending sugerida",
+    "filming_tips": ["tip1", "tip2"],
+    "editing_style": "descripcion del estilo de edicion recomendado",
+    "best_posting_time": "horario sugerido"
+  },
+  "variations": [
+    {
+      "name": "Variacion A",
+      "twist": "como cambiar ligeramente el concepto para testear"
+    },
+    {
+      "name": "Variacion B",
+      "twist": "otra alternativa para testear"
+    }
+  ]
+}`,
+      },
+    ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No se pudo parsear la respuesta de Claude");
+  return JSON.parse(jsonMatch[0]);
+}
+
 export async function evaluateCampaignPerformance(
   campaignData: Record<string, any>,
   rules: Record<string, any>[],

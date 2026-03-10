@@ -65,6 +65,7 @@ model Client {
   whatsappContacts WhatsAppContact[]
   whatsappTemplates WhatsAppTemplate[]
   whatsappFlows    WhatsAppFlow[]
+  reelScans        ReelScan[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 }
@@ -217,6 +218,45 @@ model WhatsAppFlow {
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model ReelScan {
+  id         String      @id @default(cuid())
+  clientId   String?
+  client     Client?     @relation(fields: [clientId], references: [id])
+  agencyId   String
+  niche      String
+  hashtags   String[]
+  status     String      @default("PENDING")
+  totalReels Int         @default(0)
+  reels      ViralReel[]
+  aiSummary  Json?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model ViralReel {
+  id            String   @id @default(cuid())
+  scanId        String
+  scan          ReelScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  contentType   String   @default("REEL") // REEL, POST, CAROUSEL
+  instagramUrl  String
+  shortcode     String?
+  ownerUsername  String?
+  ownerFullName String?
+  caption       String?
+  likesCount    Int      @default(0)
+  commentsCount Int      @default(0)
+  viewsCount    Int      @default(0)
+  sharesCount   Int      @default(0)
+  duration      Float?
+  thumbnailUrl  String?
+  mediaUrls     String[] // all images for carousels, video thumbnail for reels
+  musicName     String?
+  hashtags      String[]
+  postedAt      DateTime?
+  aiAnalysis    Json?
+  createdAt     DateTime @default(now())
 }
 
 model Notification {
