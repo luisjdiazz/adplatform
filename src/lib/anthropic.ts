@@ -169,25 +169,60 @@ export async function generateCampaignSuggestion(
     ? `\nPerfil de marca:\n${JSON.stringify(brandProfile, null, 2)}`
     : "";
 
+  const isAutoMode = questionnaire.modo === "auto-recommendation";
+  const isRefinedMode = questionnaire.modo === "user-refined";
+
+  let userContext = "";
+  if (isAutoMode) {
+    userContext = `\nMODO: Recomendacion automatica. Basate UNICAMENTE en el analisis del creativo y el perfil de marca para recomendar el mejor objetivo, audiencia, presupuesto y estrategia. Usa tu expertise como trafficker para elegir lo optimo.`;
+  } else if (isRefinedMode) {
+    userContext = `\nMODO: Refinamiento con input del usuario. El usuario ya vio tu recomendacion inicial y quiere ajustarla.`;
+    if (questionnaire.recomendacion_previa) {
+      userContext += `\n\nTu recomendacion previa fue:\n${JSON.stringify(questionnaire.recomendacion_previa, null, 2)}`;
+    }
+    if (questionnaire.objetivo_usuario) {
+      userContext += `\nEl usuario quiere como objetivo: ${questionnaire.objetivo_usuario}`;
+    }
+    if (questionnaire.presupuesto) {
+      userContext += `\nPresupuesto diario del usuario: $${questionnaire.presupuesto}`;
+    }
+    if (questionnaire.pais) {
+      userContext += `\nPais objetivo: ${questionnaire.pais}`;
+    }
+    if (questionnaire.edad_min || questionnaire.edad_max) {
+      userContext += `\nRango de edad: ${questionnaire.edad_min || "18"}-${questionnaire.edad_max || "65"}`;
+    }
+    if (questionnaire.genero && questionnaire.genero !== "") {
+      userContext += `\nGenero: ${questionnaire.genero}`;
+    }
+    if (questionnaire.duracion_dias) {
+      userContext += `\nDuracion deseada: ${questionnaire.duracion_dias} dias`;
+    }
+    if (questionnaire.contexto_adicional) {
+      userContext += `\n\nContexto adicional del usuario: "${questionnaire.contexto_adicional}"`;
+    }
+    userContext += `\n\nAjusta tu recomendacion previa incorporando lo que el usuario especifico. Los campos que el usuario NO lleno, mantenlos de tu recomendacion original.`;
+  } else {
+    userContext = `\nDatos del cuestionario del cliente:\n${JSON.stringify(questionnaire, null, 2)}`;
+  }
+
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 3000,
     messages: [
       {
         role: "user",
-        content: `Eres un trafficker digital experto en Meta Ads. Basado en el analisis del creativo y el cuestionario del cliente, genera una propuesta completa de campana.
+        content: `Eres un trafficker digital experto en Meta Ads con anos de experiencia manejando campanas en Latinoamerica y el Caribe. Genera una propuesta completa de campana.
 
 Analisis del creativo:
 ${JSON.stringify(creativeAnalysis, null, 2)}
-
-Cuestionario del cliente:
-${JSON.stringify(questionnaire, null, 2)}
-${brandContext}
+${brandContext}${userContext}
 
 Responde SIEMPRE en formato JSON con esta estructura exacta:
 {
   "campaign_name": "nombre sugerido para la campana",
-  "objective": "OUTCOME_SALES | OUTCOME_LEADS | OUTCOME_TRAFFIC | OUTCOME_AWARENESS",
+  "objective": "OUTCOME_SALES | OUTCOME_LEADS | OUTCOME_TRAFFIC | OUTCOME_AWARENESS | OUTCOME_ENGAGEMENT",
+  "objective_reasoning": "explicacion de por que recomiendas este objetivo especifico",
   "audiences": [
     {
       "name": "Broad - descripcion",
@@ -196,7 +231,7 @@ Responde SIEMPRE en formato JSON con esta estructura exacta:
         "age_min": 18,
         "age_max": 65,
         "genders": [],
-        "geo_locations": { "countries": ["MX"] },
+        "geo_locations": { "countries": ["DO"] },
         "interests": []
       }
     },
@@ -207,7 +242,7 @@ Responde SIEMPRE en formato JSON con esta estructura exacta:
         "age_min": 25,
         "age_max": 45,
         "genders": [],
-        "geo_locations": { "countries": ["MX"] },
+        "geo_locations": { "countries": ["DO"] },
         "interests": [{"id": "6003", "name": "interes"}]
       }
     },
@@ -225,7 +260,7 @@ Responde SIEMPRE en formato JSON con esta estructura exacta:
     "headline": "titulo del anuncio (max 40 chars)",
     "primary_text": "texto principal del anuncio",
     "description": "descripcion corta",
-    "cta": "SHOP_NOW | LEARN_MORE | SIGN_UP | CONTACT_US | GET_OFFER"
+    "cta": "SHOP_NOW | LEARN_MORE | SIGN_UP | CONTACT_US | GET_OFFER | SEND_WHATSAPP_MESSAGE"
   },
   "budget": {
     "daily_budget": 100,
