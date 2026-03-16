@@ -251,6 +251,7 @@ model ViralReel {
   sharesCount   Int      @default(0)
   duration      Float?
   thumbnailUrl  String?
+  videoUrl      String?
   mediaUrls     String[] // all images for carousels, video thumbnail for reels
   musicName     String?
   hashtags      String[]

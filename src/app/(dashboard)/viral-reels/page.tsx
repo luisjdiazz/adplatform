@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Select,
   SelectContent,
@@ -43,6 +43,7 @@ interface ViralReel {
   sharesCount: number;
   duration: number | null;
   thumbnailUrl: string | null;
+  videoUrl: string | null;
   mediaUrls: string[];
   musicName: string | null;
   hashtags: string[];
@@ -58,6 +59,49 @@ const NICHE_OPTIONS = [
   { value: "hair-salon", label: "Hair Salon" },
   { value: "real-estate", label: "Real Estate" },
 ];
+
+function InstagramEmbed({ url }: { url: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Load Instagram embed script if not already loaded
+    const scriptId = "instagram-embed-script";
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement("script");
+      script.id = scriptId;
+      script.src = "https://www.instagram.com/embed.js";
+      script.async = true;
+      document.body.appendChild(script);
+      script.onload = () => {
+        (window as any).instgrm?.Embeds?.process();
+      };
+    } else {
+      // Script already loaded, just process new embeds
+      setTimeout(() => {
+        (window as any).instgrm?.Embeds?.process();
+      }, 100);
+    }
+  }, [url]);
+
+  return (
+    <div ref={containerRef} className="flex justify-center overflow-auto p-2">
+      <blockquote
+        className="instagram-media"
+        data-instgrm-permalink={url}
+        data-instgrm-version="14"
+        style={{
+          maxWidth: "540px",
+          width: "100%",
+          minWidth: "326px",
+          background: "#000",
+          border: "0",
+          margin: "0",
+          padding: "0",
+        }}
+      />
+    </div>
+  );
+}
 
 export default function ViralContentPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -667,28 +711,9 @@ export default function ViralContentPage() {
                     key={reel.id}
                     className="group rounded-xl border bg-card transition-all hover:border-orange-500/30"
                   >
-                    {/* Thumbnail / Rank — clickable to open in Instagram */}
-                    <a
-                      href={reel.instagramUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group/thumb relative block cursor-pointer"
-                    >
-                      {reel.thumbnailUrl ? (
-                        <img
-                          src={reel.thumbnailUrl}
-                          alt=""
-                          className="h-48 w-full rounded-t-xl object-cover transition-opacity group-hover/thumb:opacity-80"
-                        />
-                      ) : (
-                        <div className="flex h-48 items-center justify-center rounded-t-xl bg-muted transition-colors group-hover/thumb:bg-muted/70">
-                          <Play className="h-12 w-12 text-muted-foreground/30" />
-                        </div>
-                      )}
-                      <div className="absolute inset-0 flex items-center justify-center rounded-t-xl bg-black/0 transition-colors group-hover/thumb:bg-black/30">
-                        <ExternalLink className="h-8 w-8 text-white opacity-0 transition-opacity group-hover/thumb:opacity-100" />
-                      </div>
-                      <div className="absolute left-2 top-2 flex items-center gap-1">
+                    {/* Inline Instagram Embed */}
+                    <div className="relative rounded-t-xl overflow-hidden">
+                      <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
                         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-xs font-bold text-white">
                           {index + 1}
                         </span>
@@ -702,10 +727,11 @@ export default function ViralContentPage() {
                           {reel.contentType === "REEL" ? "Reel" : reel.contentType === "CAROUSEL" ? "Carousel" : "Post"}
                         </span>
                       </div>
-                      <div className="absolute right-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-xs text-green-400">
+                      <div className="absolute right-2 top-2 z-10 rounded-full bg-black/70 px-2 py-0.5 text-xs text-green-400">
                         {getEngagementRate(reel).toFixed(1)}% ER
                       </div>
-                    </a>
+                      <InstagramEmbed url={reel.instagramUrl} />
+                    </div>
 
                     {/* Content */}
                     <div className="p-4">

@@ -56,6 +56,110 @@ Responde SIEMPRE en formato JSON con esta estructura exacta:
   return JSON.parse(jsonMatch[0]);
 }
 
+export async function transcribeAudio(
+  audioBase64: string
+): Promise<string> {
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 4000,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_audio",
+            source: { type: "base64", media_type: "audio/mp3", data: audioBase64 },
+          } as any,
+          {
+            type: "text",
+            text: "Transcribe el audio completo de este archivo. Si hay musica de fondo, mencionalo. Devuelve SOLO la transcripcion textual, sin formato JSON ni explicaciones adicionales. Si no hay voz humana, indica 'Sin dialogo - solo musica/efectos de sonido'.",
+          },
+        ],
+      },
+    ],
+  });
+
+  return response.content[0].type === "text" ? response.content[0].text : "";
+}
+
+export async function analyzeVideoCreative(
+  frames: { base64: string; index: number }[],
+  transcription: string | null,
+  duration: number,
+  brandProfile?: Record<string, any>
+) {
+  const brandContext = brandProfile
+    ? `\nContexto de marca del cliente:\n- Industria: ${brandProfile.industry}\n- Tono: ${brandProfile.tone}\n- Colores de marca: ${brandProfile.colors?.join(", ")}\n- Publico objetivo: ${brandProfile.targetAudience}\n- Propuesta de valor: ${brandProfile.usp}`
+    : "";
+
+  const frameContent = frames.map((f) => ({
+    type: "image" as const,
+    source: { type: "base64" as const, media_type: "image/jpeg" as const, data: f.base64 },
+  }));
+
+  const transcriptionContext = transcription
+    ? `\n\nTRANSCRIPCION DEL AUDIO:\n"${transcription}"`
+    : "\n\nEl video no tiene dialogo/voz (solo musica o sin audio).";
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 4000,
+    messages: [
+      {
+        role: "user",
+        content: [
+          ...frameContent,
+          {
+            type: "text",
+            text: `Eres un experto en marketing digital y publicidad en Meta Ads. Analiza este creativo de VIDEO publicitario. Te envio ${frames.length} fotogramas clave extraidos del video (duracion: ${Math.round(duration)}s).${transcriptionContext}${brandContext}
+
+Responde SIEMPRE en formato JSON con esta estructura exacta:
+{
+  "tipo_creativo": "video",
+  "duracion_segundos": ${Math.round(duration)},
+  "producto": "descripcion del producto/servicio que se anuncia",
+  "tono_emocional": "descripcion del tono emocional del video",
+  "colores_dominantes": ["color1", "color2", "color3"],
+  "cta_implicito": "que accion invita a tomar el video",
+  "calidad_visual": {
+    "puntuacion": 8,
+    "aspectos_positivos": ["aspecto1", "aspecto2"],
+    "aspectos_a_mejorar": ["mejora1", "mejora2"]
+  },
+  "transcripcion": "${transcription ? "la transcripcion completa" : ""}",
+  "analisis_audio": {
+    "tiene_voz": ${transcription ? "true" : "false"},
+    "tono_voz": "descripcion del tono de voz si aplica",
+    "musica": "descripcion de la musica de fondo si se detecta en los frames",
+    "efectividad_audio": "evaluacion de como el audio complementa el visual"
+  },
+  "estructura_narrativa": {
+    "hook": "que pasa en los primeros 3 segundos para captar atencion",
+    "desarrollo": "como se desarrolla el mensaje",
+    "cierre": "como termina el video y si tiene CTA claro"
+  },
+  "texto_detectado": "texto visible en los frames del video",
+  "formato_recomendado": "feed/stories/reels",
+  "duracion_optima": "si la duracion actual es buena o deberia ajustarse",
+  "cumple_20_texto": true,
+  "sugerencias": ["sugerencia1", "sugerencia2", "sugerencia3"],
+  "score_viral": {
+    "puntuacion": 7,
+    "factores": ["factor que suma", "factor que resta"]
+  }
+}`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No se pudo parsear la respuesta de Claude");
+  return JSON.parse(jsonMatch[0]);
+}
+
 export async function generateCampaignSuggestion(
   creativeAnalysis: Record<string, any>,
   questionnaire: Record<string, any>,

@@ -6,6 +6,8 @@ import { Progress } from "@/components/ui/progress";
 
 interface AnalysisResultProps {
   analysis: {
+    tipo_creativo?: string;
+    duracion_segundos?: number;
     producto: string;
     tono_emocional: string;
     colores_dominantes: string[];
@@ -19,17 +21,43 @@ interface AnalysisResultProps {
     formato_recomendado: string;
     cumple_20_texto: boolean;
     sugerencias: string[];
+    // Video-specific fields
+    transcripcion?: string;
+    analisis_audio?: {
+      tiene_voz: boolean;
+      tono_voz: string;
+      musica: string;
+      efectividad_audio: string;
+    };
+    estructura_narrativa?: {
+      hook: string;
+      desarrollo: string;
+      cierre: string;
+    };
+    duracion_optima?: string;
+    score_viral?: {
+      puntuacion: number;
+      factores: string[];
+    };
   };
 }
 
 export function AnalysisResult({ analysis }: AnalysisResultProps) {
   const score = analysis.calidad_visual?.puntuacion || 0;
+  const isVideo = analysis.tipo_creativo === "video";
 
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Analisis del creativo</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            Analisis del creativo
+            {isVideo && (
+              <Badge variant="outline" className="text-blue-600 border-blue-300">
+                Video - {analysis.duracion_segundos}s
+              </Badge>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
@@ -90,7 +118,7 @@ export function AnalysisResult({ analysis }: AnalysisResultProps) {
             </div>
           )}
 
-          <div className="flex gap-4">
+          <div className="flex gap-4 flex-wrap">
             <Badge variant={analysis.cumple_20_texto ? "success" : "warning"}>
               {analysis.cumple_20_texto ? "Cumple regla 20% texto" : "Excede 20% texto"}
             </Badge>
@@ -98,6 +126,104 @@ export function AnalysisResult({ analysis }: AnalysisResultProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Video: Transcription */}
+      {isVideo && analysis.transcripcion && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Transcripcion del audio</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm bg-muted p-4 rounded-lg italic">
+              &ldquo;{analysis.transcripcion}&rdquo;
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Video: Audio Analysis */}
+      {isVideo && analysis.analisis_audio && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Analisis de audio</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex gap-2">
+              <Badge variant={analysis.analisis_audio.tiene_voz ? "success" : "outline"}>
+                {analysis.analisis_audio.tiene_voz ? "Tiene voz" : "Sin voz"}
+              </Badge>
+            </div>
+            {analysis.analisis_audio.tono_voz && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Tono de voz</p>
+                <p className="text-sm">{analysis.analisis_audio.tono_voz}</p>
+              </div>
+            )}
+            {analysis.analisis_audio.musica && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Musica</p>
+                <p className="text-sm">{analysis.analisis_audio.musica}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Efectividad del audio</p>
+              <p className="text-sm">{analysis.analisis_audio.efectividad_audio}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Video: Narrative Structure */}
+      {isVideo && analysis.estructura_narrativa && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Estructura narrativa</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-blue-600">Hook (primeros segundos)</p>
+              <p className="text-sm">{analysis.estructura_narrativa.hook}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-purple-600">Desarrollo</p>
+              <p className="text-sm">{analysis.estructura_narrativa.desarrollo}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-green-600">Cierre</p>
+              <p className="text-sm">{analysis.estructura_narrativa.cierre}</p>
+            </div>
+            {analysis.duracion_optima && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Duracion optima</p>
+                <p className="text-sm">{analysis.duracion_optima}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Video: Viral Score */}
+      {isVideo && analysis.score_viral && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Score viral</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm font-medium text-muted-foreground">Potencial viral</p>
+                <span className="text-sm font-bold">{analysis.score_viral.puntuacion}/10</span>
+              </div>
+              <Progress value={analysis.score_viral.puntuacion * 10} />
+            </div>
+            <ul className="space-y-1">
+              {analysis.score_viral.factores?.map((f, i) => (
+                <li key={i} className="text-sm text-muted-foreground">- {f}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {analysis.sugerencias?.length > 0 && (
         <Card>

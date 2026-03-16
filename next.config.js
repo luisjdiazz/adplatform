@@ -11,7 +11,7 @@ const nextConfig = {
     ],
   },
   experimental: {
-    serverComponentsExternalPackages: ['bullmq', 'ioredis'],
+    serverComponentsExternalPackages: ['bullmq', 'ioredis', 'fluent-ffmpeg'],
   },
 };
 

@@ -206,6 +206,7 @@ export function mapApifyResult(item: ApifyResult) {
     sharesCount: item.shareCount || 0,
     duration: item.videoDuration || null,
     thumbnailUrl: item.displayUrl || item.thumbnailUrl || null,
+    videoUrl: item.videoUrl || null,
     mediaUrls,
     musicName: item.musicInfo
       ? item.musicInfo.song_name || item.musicInfo.title || item.musicInfo.artist_name || null

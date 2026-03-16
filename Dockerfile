@@ -24,6 +24,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=512"
 
+# FFmpeg is needed for video processing (frame extraction + audio extraction)
+RUN apk add --no-cache ffmpeg
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
@@ -45,6 +48,10 @@ COPY --from=deps /prod_node_modules/cluster-key-slot ./node_modules/cluster-key-
 COPY --from=deps /prod_node_modules/standard-as-callback ./node_modules/standard-as-callback
 COPY --from=deps /prod_node_modules/redis-errors ./node_modules/redis-errors
 COPY --from=deps /prod_node_modules/redis-parser ./node_modules/redis-parser
+# fluent-ffmpeg for video processing in API routes
+COPY --from=deps /prod_node_modules/fluent-ffmpeg ./node_modules/fluent-ffmpeg
+COPY --from=deps /prod_node_modules/which ./node_modules/which
+COPY --from=deps /prod_node_modules/isexe ./node_modules/isexe
 COPY --from=builder /app/worker.js ./worker.js
 COPY --from=builder /app/start.sh ./start.sh
 RUN chmod +x start.sh
