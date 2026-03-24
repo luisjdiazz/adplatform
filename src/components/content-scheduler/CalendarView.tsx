@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isToday, isBefore } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, isBefore } from "date-fns";
 import { es } from "date-fns/locale";
 import { FileVideo, FileImage, Clock, CheckCircle2, AlertCircle, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
