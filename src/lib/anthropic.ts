@@ -465,6 +465,184 @@ Analiza POR QUE este reel se hizo viral y genera un remix adaptado. Responde SIE
   return JSON.parse(jsonMatch[0]);
 }
 
+export async function generateInstagramCopy(
+  contentDescription: string,
+  fileType: string,
+  brandProfile?: Record<string, any>,
+  brandContext?: string,
+  batchContext?: { totalPosts: number; postIndex: number; otherCaptions?: string[] }
+) {
+  const brandInfo = brandProfile
+    ? `\nPerfil de marca:\n- Nombre: ${brandProfile.name || "no especificado"}\n- Industria: ${brandProfile.industry || "no especificada"}\n- Tono: ${brandProfile.tone || "no especificado"}\n- Publico objetivo: ${brandProfile.targetAudience || "no especificado"}\n- Propuesta de valor: ${brandProfile.usp || "no especificada"}\n- Colores de marca: ${brandProfile.colors?.join(", ") || "no especificados"}`
+    : "";
+
+  const extraContext = brandContext
+    ? `\n\nContexto adicional de la marca proporcionado por el usuario:\n${brandContext}`
+    : "";
+
+  const batchInfo = batchContext
+    ? `\n\nEste es el post ${batchContext.postIndex} de ${batchContext.totalPosts} en un lote de contenido mensual. ${
+        batchContext.otherCaptions?.length
+          ? `\nCaptions ya generados para otros posts del lote (evita repetir hooks/estructuras):\n${batchContext.otherCaptions.map((c, i) => `${i + 1}. ${c.substring(0, 100)}...`).join("\n")}`
+          : ""
+      }`
+    : "";
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 2000,
+    messages: [
+      {
+        role: "user",
+        content: `Eres un experto en marketing de Instagram y copywriting para redes sociales. Genera el copy perfecto para un post de Instagram.
+
+Tipo de contenido: ${fileType.startsWith("video") ? "Reel/Video" : "Imagen/Carrusel"}
+Descripcion del contenido: ${contentDescription}
+${brandInfo}${extraContext}${batchInfo}
+
+Responde SIEMPRE en formato JSON con esta estructura exacta:
+{
+  "caption": "el caption completo con emojis, line breaks, y CTA (maximo 2200 caracteres)",
+  "hook": "la primera linea que captura atencion (se muestra antes del 'ver mas')",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5", "hashtag6", "hashtag7", "hashtag8", "hashtag9", "hashtag10"],
+  "best_time": "horario sugerido de publicacion (ej: 'Martes 10:00 AM' o 'Jueves 7:00 PM')",
+  "content_pillar": "educativo | entretenimiento | inspiracional | promocional | detras_de_camaras | testimonial",
+  "cta": "call to action principal",
+  "engagement_prompt": "pregunta o frase para generar comentarios"
+}`,
+      },
+    ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No se pudo parsear la respuesta de Claude");
+  return JSON.parse(jsonMatch[0]);
+}
+
+export async function generateInstagramCopyFromImage(
+  imageBase64: string,
+  mediaType: "image/jpeg" | "image/png" | "image/webp",
+  brandProfile?: Record<string, any>,
+  brandContext?: string,
+  batchContext?: { totalPosts: number; postIndex: number; otherCaptions?: string[] }
+) {
+  const brandInfo = brandProfile
+    ? `\nPerfil de marca:\n- Nombre: ${brandProfile.name || "no especificado"}\n- Industria: ${brandProfile.industry || "no especificada"}\n- Tono: ${brandProfile.tone || "no especificado"}\n- Publico objetivo: ${brandProfile.targetAudience || "no especificado"}\n- Propuesta de valor: ${brandProfile.usp || "no especificada"}`
+    : "";
+
+  const extraContext = brandContext
+    ? `\n\nContexto adicional de la marca:\n${brandContext}`
+    : "";
+
+  const batchInfo = batchContext
+    ? `\nPost ${batchContext.postIndex} de ${batchContext.totalPosts} en el calendario mensual.${
+        batchContext.otherCaptions?.length
+          ? ` Evita repetir hooks de: ${batchContext.otherCaptions.map((c) => c.substring(0, 80)).join(" | ")}`
+          : ""
+      }`
+    : "";
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 2000,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mediaType, data: imageBase64 },
+          },
+          {
+            type: "text",
+            text: `Eres un experto en marketing de Instagram y copywriting para redes sociales. Analiza esta imagen y genera el copy perfecto para publicarla en Instagram.${brandInfo}${extraContext}${batchInfo}
+
+Responde SIEMPRE en formato JSON con esta estructura exacta:
+{
+  "content_description": "descripcion breve de lo que muestra la imagen",
+  "caption": "el caption completo con emojis, line breaks, y CTA (maximo 2200 caracteres)",
+  "hook": "la primera linea que captura atencion",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5", "hashtag6", "hashtag7", "hashtag8", "hashtag9", "hashtag10"],
+  "best_time": "horario sugerido de publicacion (ej: 'Martes 10:00 AM')",
+  "content_pillar": "educativo | entretenimiento | inspiracional | promocional | detras_de_camaras | testimonial",
+  "cta": "call to action principal",
+  "engagement_prompt": "pregunta o frase para generar comentarios"
+}`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No se pudo parsear la respuesta de Claude");
+  return JSON.parse(jsonMatch[0]);
+}
+
+export async function generateMonthlySchedule(
+  posts: { id: string; fileType: string; description: string }[],
+  monthYear: string,
+  brandProfile?: Record<string, any>,
+  brandContext?: string
+) {
+  const brandInfo = brandProfile
+    ? `\nPerfil de marca:\n- Industria: ${brandProfile.industry}\n- Tono: ${brandProfile.tone}\n- Publico objetivo: ${brandProfile.targetAudience}`
+    : "";
+
+  const extraContext = brandContext ? `\n\nContexto adicional: ${brandContext}` : "";
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 4000,
+    messages: [
+      {
+        role: "user",
+        content: `Eres un social media strategist experto. Distribuye ${posts.length} piezas de contenido en un calendario mensual optimizado para Instagram.
+
+Mes: ${monthYear}
+${brandInfo}${extraContext}
+
+Contenido disponible:
+${posts.map((p, i) => `${i + 1}. [${p.id}] Tipo: ${p.fileType.startsWith("video") ? "Reel" : "Imagen"} - ${p.description}`).join("\n")}
+
+Reglas de distribucion:
+- Maximo 1 post por dia, idealmente 3-5 posts por semana
+- Alterna tipos de contenido (reels vs imagenes)
+- Reels funcionan mejor martes, jueves y sabados
+- Imagenes/carruseles mejor lunes, miercoles y viernes
+- Horarios optimos: 10:00-12:00 y 18:00-20:00
+- Distribuye uniformemente en el mes
+- Evita publicar en fechas que ya pasaron
+
+Responde SIEMPRE en formato JSON con esta estructura:
+{
+  "schedule": [
+    {
+      "postId": "id del post",
+      "date": "YYYY-MM-DD",
+      "time": "HH:mm",
+      "reason": "por que este dia y hora para este contenido"
+    }
+  ],
+  "strategy_notes": "notas sobre la estrategia del calendario",
+  "content_mix": {
+    "reels": 0,
+    "images": 0,
+    "posts_per_week": 0
+  }
+}`,
+      },
+    ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No se pudo parsear la respuesta de Claude");
+  return JSON.parse(jsonMatch[0]);
+}
+
 export async function evaluateCampaignPerformance(
   campaignData: Record<string, any>,
   rules: Record<string, any>[],

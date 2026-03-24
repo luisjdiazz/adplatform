@@ -11,6 +11,7 @@ import {
   Bot,
   MessageSquare,
   Flame,
+  CalendarDays,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -24,6 +25,7 @@ const navItems = [
   { href: "/autopilot", label: "AI Trafficker", icon: Bot },
   { href: "/whatsapp", label: "WhatsApp CRM", icon: MessageSquare },
   { href: "/viral-reels", label: "Viral Content", icon: Flame },
+  { href: "/content-scheduler", label: "Content Scheduler", icon: CalendarDays },
   { href: "/settings", label: "Configuracion", icon: Settings },
 ];
 

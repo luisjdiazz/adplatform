@@ -23,6 +23,14 @@ enum MessageDirection {
   OUT
 }
 
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  POSTED
+  FAILED
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -66,6 +74,8 @@ model Client {
   whatsappTemplates WhatsAppTemplate[]
   whatsappFlows    WhatsAppFlow[]
   reelScans        ReelScan[]
+  contentBatches   ContentBatch[]
+  scheduledPosts   ScheduledPost[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 }
@@ -271,4 +281,41 @@ model Notification {
   actionUrl String?
   metadata  Json     @default("{}")
   createdAt DateTime @default(now())
+}
+
+model ContentBatch {
+  id             String          @id @default(cuid())
+  clientId       String
+  client         Client          @relation(fields: [clientId], references: [id])
+  name           String
+  brandContext   Json?
+  monthYear      String
+  totalPosts     Int             @default(0)
+  status         String          @default("DRAFT")
+  posts          ScheduledPost[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model ScheduledPost {
+  id              String       @id @default(cuid())
+  clientId        String
+  client          Client       @relation(fields: [clientId], references: [id])
+  batchId         String?
+  batch           ContentBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  fileUrl         String
+  fileKey         String
+  fileType        String
+  thumbnailUrl    String?
+  caption         String?
+  hashtags        String[]
+  aiAnalysis      Json?
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  igMediaId       String?
+  igPermalink     String?
+  status          PostStatus   @default(DRAFT)
+  errorMessage    String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 }

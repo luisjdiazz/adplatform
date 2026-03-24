@@ -14,7 +14,8 @@
     "db:studio": "prisma studio",
     "worker:autopilot": "tsx workers/autopilot.worker.ts",
     "worker:meta-sync": "tsx workers/meta-sync.worker.ts",
-    "worker:whatsapp": "tsx workers/whatsapp.worker.ts"
+    "worker:whatsapp": "tsx workers/whatsapp.worker.ts",
+    "worker:instagram-poster": "tsx workers/instagram-poster.worker.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -25,6 +25,7 @@ function createQueue(name: string) {
 let _autopilotQueue: Queue | null = null;
 let _metaSyncQueue: Queue | null = null;
 let _whatsappQueue: Queue | null = null;
+let _instagramPosterQueue: Queue | null = null;
 
 export function getAutopilotQueue() {
   if (!_autopilotQueue) _autopilotQueue = createQueue("autopilot");
@@ -39,4 +40,9 @@ export function getMetaSyncQueue() {
 export function getWhatsappQueue() {
   if (!_whatsappQueue) _whatsappQueue = createQueue("whatsapp");
   return _whatsappQueue;
+}
+
+export function getInstagramPosterQueue() {
+  if (!_instagramPosterQueue) _instagramPosterQueue = createQueue("instagram-poster");
+  return _instagramPosterQueue;
 }
