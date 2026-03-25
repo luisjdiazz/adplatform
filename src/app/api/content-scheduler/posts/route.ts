@@ -18,7 +18,10 @@ export async function GET(req: NextRequest) {
 
   const posts = await prisma.scheduledPost.findMany({
     where,
-    orderBy: { scheduledAt: "asc" },
+    orderBy: [
+      { scheduledAt: { sort: "asc", nulls: "last" } },
+      { createdAt: "asc" },
+    ],
   });
 
   return NextResponse.json({ posts });

@@ -70,9 +70,11 @@ export default function ContentSchedulerPage() {
     fetch(`/api/content-scheduler/batches?clientId=${selectedClient}`)
       .then((r) => r.json())
       .then((data) => {
-        setBatches(data.batches || []);
-        if (data.batches?.length > 0) {
-          selectBatch(data.batches[0]);
+        const batchList = data.batches || [];
+        setBatches(batchList);
+        if (batchList.length > 0) {
+          setActiveBatch(batchList[0]);
+          refreshPosts(batchList[0].id);
         } else {
           setActiveBatch(null);
           setPosts([]);
@@ -82,10 +84,11 @@ export default function ContentSchedulerPage() {
 
   function selectBatch(batch: Batch) {
     setActiveBatch(batch);
-    setPosts(batch.posts || []);
+    // Always load fresh posts from DB to avoid stale data
+    refreshPosts(batch.id);
   }
 
-  async function loadBatchPosts(batchId: string) {
+  async function refreshPosts(batchId: string) {
     const res = await fetch(`/api/content-scheduler/posts?batchId=${batchId}`);
     const data = await res.json();
     setPosts(data.posts || []);
@@ -121,7 +124,8 @@ export default function ContentSchedulerPage() {
   }
 
   function handleUploadComplete(newPosts: any[]) {
-    setPosts((prev) => [...prev, ...newPosts]);
+    // Reload from DB to get complete, consistent data
+    if (activeBatch) refreshPosts(activeBatch.id);
     setActiveTab("content");
   }
 
@@ -142,14 +146,8 @@ export default function ContentSchedulerPage() {
       });
       const data = await res.json();
       if (data.results) {
-        // Update local posts with generated copy
-        setPosts((prev) =>
-          prev.map((p) => {
-            const result = data.results.find((r: any) => r.postId === p.id);
-            if (result?.success) return result.post;
-            return p;
-          })
-        );
+        // Reload from DB to get fresh data with generated copy
+        if (activeBatch) await refreshPosts(activeBatch.id);
       }
     } finally {
       setGeneratingCopy(false);
@@ -169,13 +167,9 @@ export default function ContentSchedulerPage() {
         }),
       });
       const data = await res.json();
-      if (data.posts) {
-        setPosts((prev) =>
-          prev.map((p) => {
-            const updated = data.posts.find((u: any) => u.id === p.id);
-            return updated || p;
-          })
-        );
+      if (data.posts || data.schedule) {
+        // Reload from DB to get fresh scheduled posts with scheduledAt dates
+        if (activeBatch) await refreshPosts(activeBatch.id);
         setActiveTab("calendar");
       }
     } finally {
@@ -186,6 +180,8 @@ export default function ContentSchedulerPage() {
   async function handlePostUpdate(updatedPost: any) {
     setPosts((prev) => prev.map((p) => (p.id === updatedPost.id ? updatedPost : p)));
     setEditingPost(updatedPost);
+    // Also refresh from DB to keep everything in sync
+    if (activeBatch) refreshPosts(activeBatch.id);
   }
 
   async function handlePostDelete(postId: string) {
@@ -411,7 +407,7 @@ export default function ContentSchedulerPage() {
                         <button
                           key={post.id}
                           onClick={() => setEditingPost(post)}
-                          className="group rounded-lg border bg-card overflow-hidden text-left transition-shadow hover:shadow-md"
+                          className="group rounded-lg border bg-card overflow-hidden text-left transition-all hover:shadow-lg hover:scale-[1.02]"
                         >
                           {/* Thumbnail */}
                           <div className="relative aspect-square bg-muted">
@@ -425,6 +421,7 @@ export default function ContentSchedulerPage() {
                                 src={post.fileUrl}
                                 alt=""
                                 className="h-full w-full object-cover"
+                                loading="lazy"
                               />
                             )}
                             {/* Status badge */}
@@ -439,6 +436,8 @@ export default function ContentSchedulerPage() {
                                 <Badge variant="destructive" className="text-xs">Error</Badge>
                               )}
                             </div>
+                            {/* Hover overlay */}
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                           </div>
                           {/* Info */}
                           <div className="p-2">
