@@ -525,7 +525,8 @@ export async function generateInstagramCopyFromImage(
   mediaType: "image/jpeg" | "image/png" | "image/webp",
   brandProfile?: Record<string, any>,
   brandContext?: string,
-  batchContext?: { totalPosts: number; postIndex: number; otherCaptions?: string[] }
+  batchContext?: { totalPosts: number; postIndex: number; otherCaptions?: string[] },
+  userContext?: string
 ) {
   const brandInfo = brandProfile
     ? `\nPerfil de marca:\n- Nombre: ${brandProfile.name || "no especificado"}\n- Industria: ${brandProfile.industry || "no especificada"}\n- Tono: ${brandProfile.tone || "no especificado"}\n- Publico objetivo: ${brandProfile.targetAudience || "no especificado"}\n- Propuesta de valor: ${brandProfile.usp || "no especificada"}`
@@ -533,6 +534,10 @@ export async function generateInstagramCopyFromImage(
 
   const extraContext = brandContext
     ? `\n\nContexto adicional de la marca:\n${brandContext}`
+    : "";
+
+  const userInstructions = userContext
+    ? `\n\nInstrucciones especificas del usuario para este post:\n${userContext}`
     : "";
 
   const batchInfo = batchContext
@@ -556,7 +561,7 @@ export async function generateInstagramCopyFromImage(
           },
           {
             type: "text",
-            text: `Eres un experto en marketing de Instagram y copywriting para redes sociales. Analiza esta imagen y genera el copy perfecto para publicarla en Instagram.${brandInfo}${extraContext}${batchInfo}
+            text: `Eres un experto en marketing de Instagram y copywriting para redes sociales. Analiza esta imagen y genera el copy perfecto para publicarla en Instagram.${brandInfo}${extraContext}${userInstructions}${batchInfo}
 
 Responde SIEMPRE en formato JSON con esta estructura exacta:
 {
@@ -573,6 +578,80 @@ Responde SIEMPRE en formato JSON con esta estructura exacta:
         ],
       },
     ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No se pudo parsear la respuesta de Claude");
+  return JSON.parse(jsonMatch[0]);
+}
+
+export async function generateCarouselCopy(
+  images: { base64: string; mediaType: string }[],
+  brandProfile?: Record<string, any>,
+  brandContext?: string,
+  userContext?: string,
+  batchContext?: { totalPosts: number; postIndex: number; otherCaptions?: string[] }
+) {
+  const brandInfo = brandProfile
+    ? `\nPerfil de marca:\n- Nombre: ${brandProfile.name || "no especificado"}\n- Industria: ${brandProfile.industry || "no especificada"}\n- Tono: ${brandProfile.tone || "no especificado"}\n- Publico objetivo: ${brandProfile.targetAudience || "no especificado"}\n- Propuesta de valor: ${brandProfile.usp || "no especificada"}`
+    : "";
+
+  const extraContext = brandContext
+    ? `\n\nContexto adicional de la marca:\n${brandContext}`
+    : "";
+
+  const userInstructions = userContext
+    ? `\n\nInstrucciones especificas del usuario para este carrusel:\n${userContext}`
+    : "";
+
+  const batchInfo = batchContext
+    ? `\nPost ${batchContext.postIndex} de ${batchContext.totalPosts} en el calendario mensual.${
+        batchContext.otherCaptions?.length
+          ? ` Evita repetir hooks de: ${batchContext.otherCaptions.map((c) => c.substring(0, 80)).join(" | ")}`
+          : ""
+      }`
+    : "";
+
+  // Build content array with all carousel images
+  const content: any[] = [];
+  for (let i = 0; i < images.length; i++) {
+    content.push({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: images[i].mediaType,
+        data: images[i].base64,
+      },
+    });
+  }
+  content.push({
+    type: "text",
+    text: `Eres un experto en marketing de Instagram y copywriting para redes sociales. Te muestro las ${images.length} imagenes de un CARRUSEL de Instagram (en orden de slide 1 a ${images.length}). Genera UN SOLO copy que acompane todo el carrusel.${brandInfo}${extraContext}${userInstructions}${batchInfo}
+
+IMPORTANTE: Este es un carrusel con ${images.length} slides. El copy debe:
+- Hacer referencia al contenido del carrusel como un todo
+- Invitar al usuario a deslizar para ver todas las slides
+- Tener un hook que genere curiosidad sobre lo que viene en las siguientes slides
+
+Responde SIEMPRE en formato JSON con esta estructura exacta:
+{
+  "content_description": "descripcion breve del carrusel y lo que muestran las slides",
+  "slide_descriptions": ["descripcion slide 1", "descripcion slide 2", ...],
+  "caption": "el caption completo con emojis, line breaks, CTA, e invitacion a deslizar (maximo 2200 caracteres)",
+  "hook": "la primera linea que captura atencion y genera curiosidad",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5", "hashtag6", "hashtag7", "hashtag8", "hashtag9", "hashtag10"],
+  "best_time": "horario sugerido de publicacion (ej: 'Martes 10:00 AM')",
+  "content_pillar": "educativo | entretenimiento | inspiracional | promocional | detras_de_camaras | testimonial",
+  "cta": "call to action principal",
+  "engagement_prompt": "pregunta o frase para generar comentarios"
+}`,
+  });
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 2000,
+    messages: [{ role: "user", content }],
   });
 
   const text = response.content[0].type === "text" ? response.content[0].text : "";

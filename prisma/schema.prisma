@@ -307,6 +307,10 @@ model ScheduledPost {
   fileKey         String
   fileType        String
   thumbnailUrl    String?
+  postType        String       @default("SINGLE") // SINGLE, REEL, CAROUSEL
+  carouselGroupId String?      // shared ID to group carousel slides together
+  carouselOrder   Int?         // order within carousel (0 = cover/main)
+  userContext     String?      // user-provided context/instructions for AI
   caption         String?
   hashtags        String[]
   aiAnalysis      Json?

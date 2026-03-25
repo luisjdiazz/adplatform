@@ -16,6 +16,10 @@ interface Post {
   scheduledAt: string | null;
   status: string;
   igPermalink: string | null;
+  postType?: string;
+  carouselGroupId?: string | null;
+  carouselOrder?: number | null;
+  userContext?: string | null;
 }
 
 interface CalendarViewProps {
@@ -48,8 +52,17 @@ const STATUS_LABELS: Record<string, string> = {
   FAILED: "Fallo",
 };
 
-// Quick preview overlay
-function PostPreview({ post, onClose, onEdit }: { post: Post; onClose: () => void; onEdit: () => void }) {
+// Quick preview overlay with carousel support
+function PostPreview({ post, carouselSlides, onClose, onEdit }: {
+  post: Post;
+  carouselSlides: Post[];
+  onClose: () => void;
+  onEdit: () => void;
+}) {
+  const [activeSlide, setActiveSlide] = useState(0);
+  const isCarousel = carouselSlides.length > 1;
+  const currentMedia = isCarousel ? carouselSlides[activeSlide] : post;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
@@ -58,9 +71,10 @@ function PostPreview({ post, onClose, onEdit }: { post: Post; onClose: () => voi
       >
         {/* Media preview */}
         <div className="relative bg-black">
-          {post.fileType.startsWith("video") ? (
+          {currentMedia.fileType.startsWith("video") ? (
             <video
-              src={post.fileUrl}
+              key={currentMedia.id}
+              src={currentMedia.fileUrl}
               controls
               autoPlay
               muted
@@ -68,7 +82,8 @@ function PostPreview({ post, onClose, onEdit }: { post: Post; onClose: () => voi
             />
           ) : (
             <img
-              src={post.fileUrl}
+              key={currentMedia.id}
+              src={currentMedia.fileUrl}
               alt=""
               className="w-full max-h-[400px] object-contain"
             />
@@ -79,10 +94,73 @@ function PostPreview({ post, onClose, onEdit }: { post: Post; onClose: () => voi
           >
             <X className="h-4 w-4" />
           </button>
-          {post.fileType.startsWith("video") && (
-            <Badge className="absolute top-2 left-2 bg-blue-500 text-white">Reel</Badge>
+
+          {/* Type badge */}
+          <div className="absolute top-2 left-2">
+            {isCarousel ? (
+              <Badge className="bg-purple-500 text-white">Carrusel {activeSlide + 1}/{carouselSlides.length}</Badge>
+            ) : post.postType === "REEL" || post.fileType.startsWith("video") ? (
+              <Badge className="bg-blue-500 text-white">Reel</Badge>
+            ) : null}
+          </div>
+
+          {/* Carousel navigation arrows */}
+          {isCarousel && (
+            <>
+              {activeSlide > 0 && (
+                <button
+                  onClick={() => setActiveSlide((s) => s - 1)}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70"
+                >
+                  ‹
+                </button>
+              )}
+              {activeSlide < carouselSlides.length - 1 && (
+                <button
+                  onClick={() => setActiveSlide((s) => s + 1)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70"
+                >
+                  ›
+                </button>
+              )}
+            </>
           )}
         </div>
+
+        {/* Carousel dots */}
+        {isCarousel && (
+          <div className="flex justify-center gap-1.5 py-2 bg-muted/30">
+            {carouselSlides.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveSlide(i)}
+                className={`w-2 h-2 rounded-full transition-colors ${
+                  i === activeSlide ? "bg-primary" : "bg-muted-foreground/30"
+                }`}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Carousel thumbnails strip */}
+        {isCarousel && (
+          <div className="flex gap-1 px-4 py-2 overflow-x-auto">
+            {carouselSlides.map((slide, i) => (
+              <button
+                key={slide.id}
+                onClick={() => setActiveSlide(i)}
+                className={`relative shrink-0 w-12 h-12 rounded overflow-hidden border-2 transition-all ${
+                  i === activeSlide ? "border-primary" : "border-transparent opacity-60"
+                }`}
+              >
+                <img src={slide.fileUrl} alt="" className="h-full w-full object-cover" />
+                <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[8px] text-center">
+                  {i + 1}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Info */}
         <div className="p-4 space-y-3">
@@ -98,6 +176,13 @@ function PostPreview({ post, onClose, onEdit }: { post: Post; onClose: () => voi
               </span>
             )}
           </div>
+
+          {/* User context */}
+          {post.userContext && (
+            <div className="rounded bg-amber-50 border border-amber-200 px-3 py-1.5">
+              <p className="text-xs text-amber-800"><span className="font-medium">Contexto:</span> {post.userContext}</p>
+            </div>
+          )}
 
           {/* Caption */}
           {post.caption ? (
@@ -147,10 +232,42 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month]);
 
-  // Group posts by date
+  // Group carousel slides by carouselGroupId
+  const carouselSlidesMap = useMemo(() => {
+    const map = new Map<string, Post[]>();
+    for (const post of posts) {
+      if (post.postType === "CAROUSEL" && post.carouselGroupId) {
+        const group = map.get(post.carouselGroupId) || [];
+        group.push(post);
+        map.set(post.carouselGroupId, group);
+      }
+    }
+    // Sort each group by carouselOrder
+    for (const [, slides] of map) {
+      slides.sort((a, b) => (a.carouselOrder ?? 0) - (b.carouselOrder ?? 0));
+    }
+    return map;
+  }, [posts]);
+
+  // Get the "display posts" — collapse carousel slides into one entry (the cover)
+  const displayPosts = useMemo(() => {
+    const seenCarousels = new Set<string>();
+    return posts.filter((p) => {
+      if (p.postType === "CAROUSEL" && p.carouselGroupId) {
+        if (seenCarousels.has(p.carouselGroupId)) return false;
+        // Only show the first slide (order 0) as the representative
+        const slides = carouselSlidesMap.get(p.carouselGroupId);
+        if (slides && slides[0]?.id !== p.id) return false;
+        seenCarousels.add(p.carouselGroupId);
+      }
+      return true;
+    });
+  }, [posts, carouselSlidesMap]);
+
+  // Group display posts by date
   const postsByDate = useMemo(() => {
     const map: Record<string, Post[]> = {};
-    for (const post of posts) {
+    for (const post of displayPosts) {
       if (post.scheduledAt) {
         const dateKey = format(new Date(post.scheduledAt), "yyyy-MM-dd");
         if (!map[dateKey]) map[dateKey] = [];
@@ -158,11 +275,18 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
       }
     }
     return map;
-  }, [posts]);
+  }, [displayPosts]);
 
-  // Unscheduled posts
-  const unscheduledPosts = posts.filter((p) => !p.scheduledAt);
-  const scheduledCount = posts.length - unscheduledPosts.length;
+  function getCarouselSlides(post: Post): Post[] {
+    if (post.postType === "CAROUSEL" && post.carouselGroupId) {
+      return carouselSlidesMap.get(post.carouselGroupId) || [post];
+    }
+    return [post];
+  }
+
+  // Unscheduled posts (collapsed for carousels)
+  const unscheduledPosts = displayPosts.filter((p) => !p.scheduledAt);
+  const scheduledCount = displayPosts.filter((p) => p.scheduledAt).length;
 
   // Day of week headers
   const weekDays = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
@@ -224,6 +348,8 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
                   {dayPosts.map((post) => {
                     const StatusIcon = STATUS_ICONS[post.status] || Clock;
                     const isVideo = post.fileType.startsWith("video");
+                    const isCarousel = post.postType === "CAROUSEL";
+                    const slides = isCarousel ? getCarouselSlides(post) : [];
                     return (
                       <button
                         key={post.id}
@@ -247,11 +373,14 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
                           <div className="absolute top-0.5 right-0.5">
                             <StatusIcon className="h-3 w-3 drop-shadow" />
                           </div>
-                          {isVideo && (
-                            <div className="absolute bottom-0.5 left-0.5">
+                          {/* Type badge */}
+                          <div className="absolute bottom-0.5 left-0.5">
+                            {isCarousel ? (
+                              <span className="bg-purple-500 text-white text-[9px] px-1 rounded font-medium">{slides.length} slides</span>
+                            ) : isVideo ? (
                               <span className="bg-blue-500 text-white text-[9px] px-1 rounded font-medium">REEL</span>
-                            </div>
-                          )}
+                            ) : null}
+                          </div>
                           {/* Preview eye icon on hover */}
                           <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors group">
                             <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -287,6 +416,8 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
           <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
             {unscheduledPosts.map((post) => {
               const isVideo = post.fileType.startsWith("video");
+              const isCarousel = post.postType === "CAROUSEL";
+              const slides = isCarousel ? getCarouselSlides(post) : [];
               return (
                 <button
                   key={post.id}
@@ -296,13 +427,20 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
                   {isVideo ? (
                     <div className="flex h-full items-center justify-center bg-gray-900">
                       <Play className="h-5 w-5 text-white/60" />
-                      <span className="absolute bottom-1 left-1 bg-blue-500 text-white text-[9px] px-1 rounded font-medium">REEL</span>
                     </div>
                   ) : (
                     <img src={post.fileUrl} alt="" className="h-full w-full object-cover" />
                   )}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
                     <Eye className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  {/* Type badge */}
+                  <div className="absolute bottom-1 left-1">
+                    {isCarousel ? (
+                      <span className="bg-purple-500 text-white text-[9px] px-1.5 rounded font-medium">{slides.length} slides</span>
+                    ) : isVideo ? (
+                      <span className="bg-blue-500 text-white text-[9px] px-1.5 rounded font-medium">REEL</span>
+                    ) : null}
                   </div>
                   <Badge
                     variant="outline"
@@ -321,6 +459,7 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
       {previewPost && (
         <PostPreview
           post={previewPost}
+          carouselSlides={getCarouselSlides(previewPost)}
           onClose={() => setPreviewPost(null)}
           onEdit={() => {
             onPostClick(previewPost);

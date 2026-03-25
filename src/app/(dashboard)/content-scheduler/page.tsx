@@ -131,6 +131,7 @@ export default function ContentSchedulerPage() {
 
   async function generateAllCopy() {
     if (!activeBatch) return;
+    // Send ALL post IDs (including carousel slides) that need copy
     const draftPosts = posts.filter((p) => !p.caption);
     if (draftPosts.length === 0) return;
 
@@ -206,16 +207,39 @@ export default function ContentSchedulerPage() {
     }
   }
 
-  // Stats
+  // Collapse carousel slides into display posts (one entry per carousel)
+  const displayPosts = (() => {
+    const seenCarousels = new Set<string>();
+    return posts.filter((p) => {
+      if (p.postType === "CAROUSEL" && p.carouselGroupId) {
+        if (seenCarousels.has(p.carouselGroupId)) return false;
+        seenCarousels.add(p.carouselGroupId);
+      }
+      return true;
+    });
+  })();
+
+  // Get carousel slides for a post
+  function getCarouselSlides(post: any): any[] {
+    if (post.postType === "CAROUSEL" && post.carouselGroupId) {
+      return posts
+        .filter((p: any) => p.carouselGroupId === post.carouselGroupId)
+        .sort((a: any, b: any) => (a.carouselOrder ?? 0) - (b.carouselOrder ?? 0));
+    }
+    return [post];
+  }
+
+  // Stats based on display posts (collapsed carousels)
   const stats = {
-    total: posts.length,
-    draft: posts.filter((p) => p.status === "DRAFT").length,
-    scheduled: posts.filter((p) => p.status === "SCHEDULED").length,
-    posted: posts.filter((p) => p.status === "POSTED").length,
-    failed: posts.filter((p) => p.status === "FAILED").length,
-    withCopy: posts.filter((p) => p.caption).length,
-    reels: posts.filter((p) => p.fileType.startsWith("video")).length,
-    images: posts.filter((p) => !p.fileType.startsWith("video")).length,
+    total: displayPosts.length,
+    draft: displayPosts.filter((p) => p.status === "DRAFT").length,
+    scheduled: displayPosts.filter((p) => p.status === "SCHEDULED").length,
+    posted: displayPosts.filter((p) => p.status === "POSTED").length,
+    failed: displayPosts.filter((p) => p.status === "FAILED").length,
+    withCopy: displayPosts.filter((p) => p.caption).length,
+    reels: displayPosts.filter((p) => p.fileType.startsWith("video")).length,
+    images: displayPosts.filter((p) => !p.fileType.startsWith("video") && p.postType !== "CAROUSEL").length,
+    carousels: displayPosts.filter((p) => p.postType === "CAROUSEL").length,
   };
 
   return (
@@ -315,21 +339,25 @@ export default function ContentSchedulerPage() {
           {activeBatch ? (
             <div className="flex-1 min-w-0">
               {/* Stats bar */}
-              <div className="grid grid-cols-5 gap-3 mb-4">
+              <div className="grid grid-cols-6 gap-3 mb-4">
                 <div className="rounded-lg border bg-card p-3 text-center">
                   <p className="text-2xl font-bold">{stats.total}</p>
                   <p className="text-xs text-muted-foreground">Total</p>
-                </div>
-                <div className="rounded-lg border bg-card p-3 text-center">
-                  <p className="text-2xl font-bold text-blue-600">{stats.reels}</p>
-                  <p className="text-xs text-muted-foreground">Reels</p>
                 </div>
                 <div className="rounded-lg border bg-card p-3 text-center">
                   <p className="text-2xl font-bold text-green-600">{stats.images}</p>
                   <p className="text-xs text-muted-foreground">Imagenes</p>
                 </div>
                 <div className="rounded-lg border bg-card p-3 text-center">
-                  <p className="text-2xl font-bold text-purple-600">{stats.withCopy}</p>
+                  <p className="text-2xl font-bold text-blue-600">{stats.reels}</p>
+                  <p className="text-xs text-muted-foreground">Reels</p>
+                </div>
+                <div className="rounded-lg border bg-card p-3 text-center">
+                  <p className="text-2xl font-bold text-purple-600">{stats.carousels}</p>
+                  <p className="text-xs text-muted-foreground">Carruseles</p>
+                </div>
+                <div className="rounded-lg border bg-card p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-600">{stats.withCopy}</p>
                   <p className="text-xs text-muted-foreground">Con copy</p>
                 </div>
                 <div className="rounded-lg border bg-card p-3 text-center">
@@ -396,63 +424,92 @@ export default function ContentSchedulerPage() {
 
                 {/* Content tab */}
                 <TabsContent value="content">
-                  {posts.length === 0 ? (
+                  {displayPosts.length === 0 ? (
                     <div className="rounded-lg border bg-card p-12 text-center">
                       <Upload className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
                       <p className="text-muted-foreground">No hay contenido aun. Sube archivos en la pestana "Subir".</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {posts.map((post) => (
-                        <button
-                          key={post.id}
-                          onClick={() => setEditingPost(post)}
-                          className="group rounded-lg border bg-card overflow-hidden text-left transition-all hover:shadow-lg hover:scale-[1.02]"
-                        >
-                          {/* Thumbnail */}
-                          <div className="relative aspect-square bg-muted">
-                            {post.fileType.startsWith("video") ? (
-                              <div className="flex h-full items-center justify-center bg-gray-900">
-                                <FileVideo className="h-8 w-8 text-white/60" />
-                                <Badge className="absolute top-2 left-2 bg-blue-500 text-white text-xs">Reel</Badge>
+                      {displayPosts.map((post) => {
+                        const isCarousel = post.postType === "CAROUSEL";
+                        const slides = isCarousel ? getCarouselSlides(post) : [];
+                        return (
+                          <button
+                            key={post.id}
+                            onClick={() => setEditingPost(post)}
+                            className="group rounded-lg border bg-card overflow-hidden text-left transition-all hover:shadow-lg hover:scale-[1.02]"
+                          >
+                            {/* Thumbnail */}
+                            <div className="relative aspect-square bg-muted">
+                              {post.fileType.startsWith("video") ? (
+                                <div className="flex h-full items-center justify-center bg-gray-900">
+                                  <FileVideo className="h-8 w-8 text-white/60" />
+                                </div>
+                              ) : (
+                                <img
+                                  src={post.fileUrl}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              )}
+                              {/* Type badge */}
+                              <div className="absolute top-2 left-2">
+                                {isCarousel ? (
+                                  <Badge className="bg-purple-500 text-white text-xs">{slides.length} slides</Badge>
+                                ) : post.fileType.startsWith("video") ? (
+                                  <Badge className="bg-blue-500 text-white text-xs">Reel</Badge>
+                                ) : null}
                               </div>
-                            ) : (
-                              <img
-                                src={post.fileUrl}
-                                alt=""
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                              />
-                            )}
-                            {/* Status badge */}
-                            <div className="absolute top-2 right-2">
-                              {post.status === "POSTED" && (
-                                <CheckCircle2 className="h-5 w-5 text-green-500 drop-shadow" />
+                              {/* Status badge */}
+                              <div className="absolute top-2 right-2">
+                                {post.status === "POSTED" && (
+                                  <CheckCircle2 className="h-5 w-5 text-green-500 drop-shadow" />
+                                )}
+                                {post.status === "SCHEDULED" && (
+                                  <Clock className="h-5 w-5 text-blue-500 drop-shadow" />
+                                )}
+                                {post.status === "FAILED" && (
+                                  <Badge variant="destructive" className="text-xs">Error</Badge>
+                                )}
+                              </div>
+                              {/* Carousel slide strip at bottom */}
+                              {isCarousel && slides.length > 1 && (
+                                <div className="absolute bottom-0 inset-x-0 flex gap-0.5 p-1 bg-gradient-to-t from-black/50">
+                                  {slides.slice(0, 5).map((slide: any, i: number) => (
+                                    <div key={slide.id} className="h-6 flex-1 rounded-sm overflow-hidden border border-white/30">
+                                      <img src={slide.fileUrl} alt="" className="h-full w-full object-cover" />
+                                    </div>
+                                  ))}
+                                  {slides.length > 5 && (
+                                    <div className="h-6 flex-1 rounded-sm bg-black/50 flex items-center justify-center">
+                                      <span className="text-white text-[9px]">+{slides.length - 5}</span>
+                                    </div>
+                                  )}
+                                </div>
                               )}
-                              {post.status === "SCHEDULED" && (
-                                <Clock className="h-5 w-5 text-blue-500 drop-shadow" />
+                              {/* Hover overlay */}
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                            </div>
+                            {/* Info */}
+                            <div className="p-2">
+                              {post.userContext && (
+                                <p className="text-[10px] text-amber-600 truncate mb-0.5">{post.userContext}</p>
                               )}
-                              {post.status === "FAILED" && (
-                                <Badge variant="destructive" className="text-xs">Error</Badge>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {post.caption ? post.caption.substring(0, 60) + "..." : "Sin caption"}
+                              </p>
+                              {post.scheduledAt && (
+                                <p className="text-xs text-primary mt-1 flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {format(new Date(post.scheduledAt), "dd MMM HH:mm")}
+                                </p>
                               )}
                             </div>
-                            {/* Hover overlay */}
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                          </div>
-                          {/* Info */}
-                          <div className="p-2">
-                            <p className="text-xs text-muted-foreground truncate">
-                              {post.caption ? post.caption.substring(0, 60) + "..." : "Sin caption"}
-                            </p>
-                            {post.scheduledAt && (
-                              <p className="text-xs text-primary mt-1 flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {format(new Date(post.scheduledAt), "dd MMM HH:mm")}
-                              </p>
-                            )}
-                          </div>
-                        </button>
-                      ))}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </TabsContent>
@@ -485,6 +542,7 @@ export default function ContentSchedulerPage() {
       {editingPost && (
         <PostEditor
           post={editingPost}
+          carouselSlides={getCarouselSlides(editingPost)}
           onUpdate={handlePostUpdate}
           onDelete={handlePostDelete}
           onPublish={handlePublish}

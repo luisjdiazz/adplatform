@@ -4,7 +4,7 @@ import { useState } from "react";
 import { format } from "date-fns";
 import {
   FileVideo, FileImage, Send, Clock, CheckCircle2, AlertCircle,
-  Loader2, Sparkles, Save, Trash2, ExternalLink,
+  Loader2, Sparkles, Save, Trash2, ExternalLink, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 
 interface PostEditorProps {
   post: any;
+  carouselSlides?: any[];
   onUpdate: (post: any) => void;
   onDelete: (postId: string) => void;
   onPublish: (postId: string) => void;
@@ -27,8 +28,9 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   FAILED: { label: "Fallo", color: "bg-red-100 text-red-700" },
 };
 
-export function PostEditor({ post, onUpdate, onDelete, onPublish, onClose }: PostEditorProps) {
+export function PostEditor({ post, carouselSlides = [], onUpdate, onDelete, onPublish, onClose }: PostEditorProps) {
   const [caption, setCaption] = useState(post.caption || "");
+  const [userContext, setUserContext] = useState(post.userContext || "");
   const [scheduledDate, setScheduledDate] = useState(
     post.scheduledAt ? format(new Date(post.scheduledAt), "yyyy-MM-dd") : ""
   );
@@ -38,6 +40,9 @@ export function PostEditor({ post, onUpdate, onDelete, onPublish, onClose }: Pos
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [generatingCopy, setGeneratingCopy] = useState(false);
+  const [activeSlide, setActiveSlide] = useState(0);
+  const isCarousel = post.postType === "CAROUSEL" && carouselSlides.length > 1;
+  const slides = isCarousel ? carouselSlides : [post];
 
   const statusInfo = STATUS_LABELS[post.status] || STATUS_LABELS.DRAFT;
   const isEditable = post.status === "DRAFT" || post.status === "SCHEDULED" || post.status === "FAILED";
@@ -55,6 +60,7 @@ export function PostEditor({ post, onUpdate, onDelete, onPublish, onClose }: Pos
         body: JSON.stringify({
           postId: post.id,
           caption,
+          userContext,
           scheduledAt,
           status: scheduledAt ? "SCHEDULED" : "DRAFT",
         }),
@@ -108,12 +114,16 @@ export function PostEditor({ post, onUpdate, onDelete, onPublish, onClose }: Pos
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            {post.fileType.startsWith("video") ? (
+            {isCarousel ? (
+              <Layers className="h-5 w-5 text-purple-500" />
+            ) : post.fileType.startsWith("video") ? (
               <FileVideo className="h-5 w-5 text-blue-500" />
             ) : (
               <FileImage className="h-5 w-5 text-green-500" />
             )}
-            <h3 className="text-lg font-semibold">Editar Post</h3>
+            <h3 className="text-lg font-semibold">
+              {isCarousel ? `Editar Carrusel (${slides.length} slides)` : "Editar Post"}
+            </h3>
             <Badge className={statusInfo.color}>{statusInfo.label}</Badge>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xl">&times;</button>
@@ -121,11 +131,64 @@ export function PostEditor({ post, onUpdate, onDelete, onPublish, onClose }: Pos
 
         {/* Preview */}
         <div className="mb-4 rounded-lg border overflow-hidden bg-muted/20">
-          {post.fileType.startsWith("video") ? (
-            <video src={post.fileUrl} controls className="w-full max-h-64 object-contain bg-black" />
-          ) : (
-            <img src={post.fileUrl} alt="Preview" className="w-full max-h-64 object-contain" />
+          <div className="relative">
+            {slides[activeSlide]?.fileType?.startsWith("video") ? (
+              <video key={slides[activeSlide].id} src={slides[activeSlide].fileUrl} controls className="w-full max-h-64 object-contain bg-black" />
+            ) : (
+              <img key={slides[activeSlide]?.id} src={slides[activeSlide]?.fileUrl} alt="Preview" className="w-full max-h-64 object-contain" />
+            )}
+            {/* Carousel nav arrows */}
+            {isCarousel && (
+              <>
+                {activeSlide > 0 && (
+                  <button
+                    onClick={() => setActiveSlide((s) => s - 1)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70"
+                  >
+                    ‹
+                  </button>
+                )}
+                {activeSlide < slides.length - 1 && (
+                  <button
+                    onClick={() => setActiveSlide((s) => s + 1)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70"
+                  >
+                    ›
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          {/* Carousel thumbnail strip */}
+          {isCarousel && (
+            <div className="flex gap-1 p-2 bg-muted/30 overflow-x-auto">
+              {slides.map((slide: any, i: number) => (
+                <button
+                  key={slide.id}
+                  onClick={() => setActiveSlide(i)}
+                  className={`relative shrink-0 w-14 h-14 rounded overflow-hidden border-2 transition-all ${
+                    i === activeSlide ? "border-primary" : "border-transparent opacity-60"
+                  }`}
+                >
+                  <img src={slide.fileUrl} alt="" className="h-full w-full object-cover" />
+                  <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[9px] text-center">{i + 1}</span>
+                </button>
+              ))}
+            </div>
           )}
+        </div>
+
+        {/* User context */}
+        <div className="space-y-2 mb-4">
+          <Label>Contexto / Instrucciones para AI</Label>
+          <textarea
+            value={userContext}
+            onChange={(e) => setUserContext(e.target.value)}
+            disabled={!isEditable}
+            rows={2}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            placeholder="Ej: Este post es sobre nuestra nueva coleccion de verano, tono playero y fresco..."
+          />
         </div>
 
         {/* Caption */}

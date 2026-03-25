@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { toProxyUrl } from "@/lib/storage";
 
 // GET /api/content-scheduler/batches?clientId=xxx
 export async function GET(req: NextRequest) {
@@ -22,7 +23,13 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({ batches });
+  // Convert R2 URLs to proxy URLs
+  const batchesWithProxyUrls = batches.map((b) => ({
+    ...b,
+    posts: b.posts.map((p) => ({ ...p, fileUrl: toProxyUrl(p.fileUrl) })),
+  }));
+
+  return NextResponse.json({ batches: batchesWithProxyUrls });
 }
 
 // POST /api/content-scheduler/batches — Create a new batch

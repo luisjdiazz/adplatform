@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { uploadFile } from "@/lib/storage";
+import { uploadFile, toProxyUrl } from "@/lib/storage";
 
 // GET /api/content-scheduler/posts?clientId=xxx&batchId=xxx
 export async function GET(req: NextRequest) {
@@ -24,7 +24,13 @@ export async function GET(req: NextRequest) {
     ],
   });
 
-  return NextResponse.json({ posts });
+  // Convert R2 URLs to proxy URLs so files load in browser
+  const postsWithProxyUrls = posts.map((p) => ({
+    ...p,
+    fileUrl: toProxyUrl(p.fileUrl),
+  }));
+
+  return NextResponse.json({ posts: postsWithProxyUrls });
 }
 
 // POST /api/content-scheduler/posts — Upload files and create posts
@@ -36,6 +42,10 @@ export async function POST(req: NextRequest) {
   const clientId = formData.get("clientId") as string;
   const batchId = formData.get("batchId") as string | null;
   const files = formData.getAll("files") as File[];
+  const postType = (formData.get("postType") as string) || "SINGLE";
+  const carouselGroupId = formData.get("carouselGroupId") as string | null;
+  const carouselOrder = formData.get("carouselOrder") ? parseInt(formData.get("carouselOrder") as string) : null;
+  const userContext = formData.get("userContext") as string | null;
 
   if (!clientId || files.length === 0) {
     return NextResponse.json({ error: "clientId y al menos un archivo son requeridos" }, { status: 400 });
@@ -58,6 +68,10 @@ export async function POST(req: NextRequest) {
         fileUrl,
         fileKey: key,
         fileType: file.type,
+        postType,
+        carouselGroupId: carouselGroupId || null,
+        carouselOrder: carouselOrder,
+        userContext: userContext || null,
         status: "DRAFT",
       },
     });
@@ -82,7 +96,7 @@ export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const { postId, caption, hashtags, scheduledAt, status } = await req.json();
+  const { postId, caption, hashtags, scheduledAt, status, userContext } = await req.json();
   if (!postId) return NextResponse.json({ error: "postId requerido" }, { status: 400 });
 
   const data: any = {};
@@ -90,6 +104,7 @@ export async function PATCH(req: NextRequest) {
   if (hashtags !== undefined) data.hashtags = hashtags;
   if (scheduledAt !== undefined) data.scheduledAt = scheduledAt ? new Date(scheduledAt) : null;
   if (status !== undefined) data.status = status;
+  if (userContext !== undefined) data.userContext = userContext;
 
   const post = await prisma.scheduledPost.update({
     where: { id: postId },
