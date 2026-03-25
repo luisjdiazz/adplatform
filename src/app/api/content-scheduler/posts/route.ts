@@ -98,7 +98,7 @@ export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const { postId, caption, hashtags, scheduledAt, status, userContext } = await req.json();
+  const { postId, caption, hashtags, scheduledAt, status, userContext, postType, carouselGroupId, carouselOrder } = await req.json();
   if (!postId) return NextResponse.json({ error: "postId requerido" }, { status: 400 });
 
   const data: any = {};
@@ -107,6 +107,9 @@ export async function PATCH(req: NextRequest) {
   if (scheduledAt !== undefined) data.scheduledAt = scheduledAt ? new Date(scheduledAt) : null;
   if (status !== undefined) data.status = status;
   if (userContext !== undefined) data.userContext = userContext;
+  if (postType !== undefined) data.postType = postType;
+  if (carouselGroupId !== undefined) data.carouselGroupId = carouselGroupId;
+  if (carouselOrder !== undefined) data.carouselOrder = carouselOrder;
 
   const post = await prisma.scheduledPost.update({
     where: { id: postId },

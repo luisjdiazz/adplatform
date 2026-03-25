@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import {
   CalendarDays, Sparkles, Loader2, Plus, Upload, Clock,
-  CheckCircle2, FileVideo, FileImage, Send,
+  CheckCircle2, FileVideo, FileImage, Send, Layers,
+  Play, ChevronUp, ChevronDown, X, GripVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,11 @@ export default function ContentSchedulerPage() {
   // Generation states
   const [generatingCopy, setGeneratingCopy] = useState(false);
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
+
+  // Carousel grouping from content tab
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(new Set());
+  const [groupingCarousel, setGroupingCarousel] = useState(false);
 
   // Load clients
   useEffect(() => {
@@ -183,6 +189,84 @@ export default function ContentSchedulerPage() {
     setEditingPost(updatedPost);
     // Also refresh from DB to keep everything in sync
     if (activeBatch) refreshPosts(activeBatch.id);
+  }
+
+  function togglePostSelection(postId: string) {
+    setSelectedPostIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(postId)) next.delete(postId);
+      else next.add(postId);
+      return next;
+    });
+  }
+
+  async function groupAsCarousel() {
+    if (selectedPostIds.size < 2 || !activeBatch) return;
+    setGroupingCarousel(true);
+    try {
+      const groupId = `carousel-${Date.now()}`;
+      const ids = [...selectedPostIds];
+      // Update each post to be part of the carousel
+      for (let i = 0; i < ids.length; i++) {
+        await fetch("/api/content-scheduler/posts", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            postId: ids[i],
+            postType: "CAROUSEL",
+            carouselGroupId: groupId,
+            carouselOrder: i,
+          }),
+        });
+      }
+      await refreshPosts(activeBatch.id);
+      setSelectedPostIds(new Set());
+      setSelectMode(false);
+    } finally {
+      setGroupingCarousel(false);
+    }
+  }
+
+  async function ungroupCarousel(carouselGroupId: string) {
+    if (!activeBatch) return;
+    const slides = posts.filter((p: any) => p.carouselGroupId === carouselGroupId);
+    for (const slide of slides) {
+      await fetch("/api/content-scheduler/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postId: slide.id,
+          postType: "SINGLE",
+          carouselGroupId: null,
+          carouselOrder: null,
+        }),
+      });
+    }
+    await refreshPosts(activeBatch.id);
+  }
+
+  async function moveCarouselSlide(carouselGroupId: string, postId: string, direction: "up" | "down") {
+    if (!activeBatch) return;
+    const slides = posts
+      .filter((p: any) => p.carouselGroupId === carouselGroupId)
+      .sort((a: any, b: any) => (a.carouselOrder ?? 0) - (b.carouselOrder ?? 0));
+    const idx = slides.findIndex((s: any) => s.id === postId);
+    const newIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= slides.length) return;
+    // Swap orders
+    await Promise.all([
+      fetch("/api/content-scheduler/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: slides[idx].id, carouselOrder: newIdx }),
+      }),
+      fetch("/api/content-scheduler/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: slides[newIdx].id, carouselOrder: idx }),
+      }),
+    ]);
+    await refreshPosts(activeBatch.id);
   }
 
   async function handlePostDelete(postId: string) {
@@ -430,86 +514,209 @@ export default function ContentSchedulerPage() {
                       <p className="text-muted-foreground">No hay contenido aun. Sube archivos en la pestana "Subir".</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {displayPosts.map((post) => {
-                        const isCarousel = post.postType === "CAROUSEL";
-                        const slides = isCarousel ? getCarouselSlides(post) : [];
-                        return (
-                          <button
-                            key={post.id}
-                            onClick={() => setEditingPost(post)}
-                            className="group rounded-lg border bg-card overflow-hidden text-left transition-all hover:shadow-lg hover:scale-[1.02]"
+                    <div className="space-y-4">
+                      {/* Selection toolbar */}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant={selectMode ? "default" : "outline"}
+                          onClick={() => {
+                            setSelectMode(!selectMode);
+                            setSelectedPostIds(new Set());
+                          }}
+                        >
+                          <Layers className="mr-1 h-3 w-3" />
+                          {selectMode ? "Cancelar seleccion" : "Crear carrusel"}
+                        </Button>
+                        {selectMode && selectedPostIds.size >= 2 && (
+                          <Button
+                            size="sm"
+                            onClick={groupAsCarousel}
+                            disabled={groupingCarousel}
                           >
-                            {/* Thumbnail */}
-                            <div className="relative aspect-square bg-muted">
-                              {post.fileType.startsWith("video") ? (
-                                <div className="flex h-full items-center justify-center bg-gray-900">
-                                  <FileVideo className="h-8 w-8 text-white/60" />
-                                </div>
-                              ) : (
-                                <img
-                                  src={post.fileUrl}
-                                  alt=""
-                                  className="h-full w-full object-cover"
-                                  loading="lazy"
-                                />
-                              )}
-                              {/* Type badge */}
-                              <div className="absolute top-2 left-2">
-                                {isCarousel ? (
-                                  <Badge className="bg-purple-500 text-white text-xs">{slides.length} slides</Badge>
-                                ) : post.fileType.startsWith("video") ? (
-                                  <Badge className="bg-blue-500 text-white text-xs">Reel</Badge>
-                                ) : null}
-                              </div>
-                              {/* Status badge */}
-                              <div className="absolute top-2 right-2">
-                                {post.status === "POSTED" && (
-                                  <CheckCircle2 className="h-5 w-5 text-green-500 drop-shadow" />
-                                )}
-                                {post.status === "SCHEDULED" && (
-                                  <Clock className="h-5 w-5 text-blue-500 drop-shadow" />
-                                )}
-                                {post.status === "FAILED" && (
-                                  <Badge variant="destructive" className="text-xs">Error</Badge>
-                                )}
-                              </div>
-                              {/* Carousel slide strip at bottom */}
-                              {isCarousel && slides.length > 1 && (
-                                <div className="absolute bottom-0 inset-x-0 flex gap-0.5 p-1 bg-gradient-to-t from-black/50">
-                                  {slides.slice(0, 5).map((slide: any, i: number) => (
-                                    <div key={slide.id} className="h-6 flex-1 rounded-sm overflow-hidden border border-white/30">
-                                      <img src={slide.fileUrl} alt="" className="h-full w-full object-cover" />
+                            {groupingCarousel ? (
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            ) : (
+                              <Layers className="mr-1 h-3 w-3" />
+                            )}
+                            Agrupar {selectedPostIds.size} fotos en carrusel
+                          </Button>
+                        )}
+                        {selectMode && (
+                          <span className="text-xs text-muted-foreground">
+                            Selecciona 2+ imagenes para agrupar
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Content grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {displayPosts.map((post) => {
+                          const isCarousel = post.postType === "CAROUSEL";
+                          const isVideo = post.fileType.startsWith("video");
+                          const slides = isCarousel ? getCarouselSlides(post) : [];
+                          const isSelected = selectedPostIds.has(post.id);
+                          const canSelect = selectMode && !isVideo && !isCarousel;
+
+                          return (
+                            <div key={post.id} className="space-y-0">
+                              <button
+                                onClick={() => {
+                                  if (canSelect) {
+                                    togglePostSelection(post.id);
+                                  } else if (!selectMode) {
+                                    setEditingPost(post);
+                                  }
+                                }}
+                                className={`group w-full rounded-lg border bg-card overflow-hidden text-left transition-all hover:shadow-lg ${
+                                  isSelected ? "ring-2 ring-primary border-primary" : ""
+                                } ${selectMode && !canSelect ? "opacity-50" : ""}`}
+                              >
+                                {/* Thumbnail */}
+                                <div className="relative aspect-square bg-muted">
+                                  {isVideo ? (
+                                    <div className="relative h-full bg-black">
+                                      <video
+                                        src={post.fileUrl}
+                                        className="h-full w-full object-cover"
+                                        muted
+                                        preload="metadata"
+                                      />
+                                      {/* Play button overlay */}
+                                      <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="bg-white/90 rounded-full p-3 shadow-lg group-hover:scale-110 transition-transform">
+                                          <Play className="h-6 w-6 text-gray-900 ml-0.5" />
+                                        </div>
+                                      </div>
                                     </div>
-                                  ))}
-                                  {slides.length > 5 && (
-                                    <div className="h-6 flex-1 rounded-sm bg-black/50 flex items-center justify-center">
-                                      <span className="text-white text-[9px]">+{slides.length - 5}</span>
+                                  ) : (
+                                    <img
+                                      src={post.fileUrl}
+                                      alt=""
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  )}
+                                  {/* Selection checkbox */}
+                                  {canSelect && (
+                                    <div className={`absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                                      isSelected ? "bg-primary border-primary text-white" : "bg-white/80 border-gray-300"
+                                    }`}>
+                                      {isSelected && <span className="text-xs font-bold">✓</span>}
+                                    </div>
+                                  )}
+                                  {/* Type badge */}
+                                  {!selectMode && (
+                                    <div className="absolute top-2 left-2">
+                                      {isCarousel ? (
+                                        <Badge className="bg-purple-500 text-white text-xs">{slides.length} slides</Badge>
+                                      ) : isVideo ? (
+                                        <Badge className="bg-blue-500 text-white text-xs">Reel</Badge>
+                                      ) : null}
+                                    </div>
+                                  )}
+                                  {/* Status badge */}
+                                  <div className="absolute top-2 right-2">
+                                    {post.status === "POSTED" && (
+                                      <CheckCircle2 className="h-5 w-5 text-green-500 drop-shadow" />
+                                    )}
+                                    {post.status === "SCHEDULED" && (
+                                      <Clock className="h-5 w-5 text-blue-500 drop-shadow" />
+                                    )}
+                                    {post.status === "FAILED" && (
+                                      <Badge variant="destructive" className="text-xs">Error</Badge>
+                                    )}
+                                  </div>
+                                  {/* Carousel slide strip at bottom */}
+                                  {isCarousel && slides.length > 1 && (
+                                    <div className="absolute bottom-0 inset-x-0 flex gap-0.5 p-1 bg-gradient-to-t from-black/50">
+                                      {slides.slice(0, 5).map((slide: any) => (
+                                        <div key={slide.id} className="h-6 flex-1 rounded-sm overflow-hidden border border-white/30">
+                                          <img src={slide.fileUrl} alt="" className="h-full w-full object-cover" />
+                                        </div>
+                                      ))}
+                                      {slides.length > 5 && (
+                                        <div className="h-6 flex-1 rounded-sm bg-black/50 flex items-center justify-center">
+                                          <span className="text-white text-[9px]">+{slides.length - 5}</span>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
+                                {/* Info */}
+                                <div className="p-2">
+                                  {post.userContext && (
+                                    <p className="text-[10px] text-amber-600 truncate mb-0.5">{post.userContext}</p>
+                                  )}
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {post.caption ? post.caption.substring(0, 60) + "..." : "Sin caption"}
+                                  </p>
+                                  {post.scheduledAt && (
+                                    <p className="text-xs text-primary mt-1 flex items-center gap-1">
+                                      <Clock className="h-3 w-3" />
+                                      {format(new Date(post.scheduledAt), "dd MMM HH:mm")}
+                                    </p>
+                                  )}
+                                </div>
+                              </button>
+
+                              {/* Carousel management strip */}
+                              {isCarousel && !selectMode && (
+                                <div className="rounded-b-lg border border-t-0 bg-purple-50 p-2">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-[10px] font-medium text-purple-700">
+                                      Carrusel · {slides.length} slides
+                                    </span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (post.carouselGroupId) ungroupCarousel(post.carouselGroupId);
+                                      }}
+                                      className="text-[10px] text-purple-500 hover:text-red-500 transition-colors"
+                                    >
+                                      Desagrupar
+                                    </button>
+                                  </div>
+                                  <div className="flex gap-1 overflow-x-auto pb-1">
+                                    {slides.map((slide: any, idx: number) => (
+                                      <div key={slide.id} className="relative shrink-0 w-10 h-10 rounded overflow-hidden border group/slide">
+                                        <img src={slide.fileUrl} alt="" className="h-full w-full object-cover" />
+                                        <span className="absolute top-0 left-0 bg-purple-600 text-white text-[8px] px-1 rounded-br font-bold">
+                                          {idx + 1}
+                                        </span>
+                                        <div className="absolute bottom-0 inset-x-0 flex justify-center gap-px opacity-0 group-hover/slide:opacity-100 transition-opacity bg-black/40">
+                                          {idx > 0 && (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (post.carouselGroupId) moveCarouselSlide(post.carouselGroupId, slide.id, "up");
+                                              }}
+                                              className="text-white p-0.5"
+                                            >
+                                              <ChevronUp className="h-2.5 w-2.5 -rotate-90" />
+                                            </button>
+                                          )}
+                                          {idx < slides.length - 1 && (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (post.carouselGroupId) moveCarouselSlide(post.carouselGroupId, slide.id, "down");
+                                              }}
+                                              className="text-white p-0.5"
+                                            >
+                                              <ChevronDown className="h-2.5 w-2.5 -rotate-90" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
                               )}
-                              {/* Hover overlay */}
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                             </div>
-                            {/* Info */}
-                            <div className="p-2">
-                              {post.userContext && (
-                                <p className="text-[10px] text-amber-600 truncate mb-0.5">{post.userContext}</p>
-                              )}
-                              <p className="text-xs text-muted-foreground truncate">
-                                {post.caption ? post.caption.substring(0, 60) + "..." : "Sin caption"}
-                              </p>
-                              {post.scheduledAt && (
-                                <p className="text-xs text-primary mt-1 flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {format(new Date(post.scheduledAt), "dd MMM HH:mm")}
-                                </p>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </TabsContent>
