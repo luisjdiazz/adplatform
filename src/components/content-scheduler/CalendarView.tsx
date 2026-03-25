@@ -133,7 +133,7 @@ function PostPreview({ post, carouselSlides, onClose, onEdit }: {
             {post.scheduledAt && (
               <span className="text-sm text-muted-foreground flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5" />
-                {format(new Date(post.scheduledAt), "dd MMM yyyy · HH:mm", { locale: es })}
+                {format(new Date(post.scheduledAt), "dd MMM yyyy · h:mm a", { locale: es })}
               </span>
             )}
           </div>
@@ -257,7 +257,7 @@ export function CalendarView({ posts, monthYear, onPostClick, onPostReschedule }
     // Find the post to get its current time, or default to 10:00
     const post = displayPosts.find((p) => p.id === postId);
     const time = post?.scheduledAt
-      ? format(new Date(post.scheduledAt), "HH:mm")
+      ? format(new Date(post.scheduledAt), "HH:mm") // keep 24h for the API
       : "10:00";
 
     onPostReschedule(postId, dateKey, time);
@@ -391,7 +391,7 @@ export function CalendarView({ posts, monthYear, onPostClick, onPostReschedule }
                           <div className="flex items-center gap-1 text-[11px]">
                             <Clock className="h-2.5 w-2.5 shrink-0" />
                             <span className="font-medium">
-                              {post.scheduledAt ? format(new Date(post.scheduledAt), "HH:mm") : ""}
+                              {post.scheduledAt ? format(new Date(post.scheduledAt), "h:mm a") : ""}
                             </span>
                           </div>
                           {post.caption && (

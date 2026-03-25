@@ -252,12 +252,65 @@ export function PostEditor({ post, carouselSlides = [], onUpdate, onDelete, onPu
           </div>
           <div className="space-y-1">
             <Label>Hora</Label>
-            <Input
-              type="time"
-              value={scheduledTime}
-              onChange={(e) => setScheduledTime(e.target.value)}
-              disabled={!isEditable}
-            />
+            <div className="flex gap-1.5">
+              <select
+                value={(() => {
+                  if (!scheduledTime) return "";
+                  const h = parseInt(scheduledTime.split(":")[0]);
+                  return h === 0 ? "12" : h > 12 ? String(h - 12) : String(h);
+                })()}
+                onChange={(e) => {
+                  const hour12 = parseInt(e.target.value);
+                  const mins = scheduledTime ? scheduledTime.split(":")[1] : "00";
+                  const currentH = parseInt(scheduledTime?.split(":")[0] || "12");
+                  const isPM = currentH >= 12;
+                  let h24 = isPM ? (hour12 === 12 ? 12 : hour12 + 12) : (hour12 === 12 ? 0 : hour12);
+                  setScheduledTime(`${String(h24).padStart(2, "0")}:${mins}`);
+                }}
+                disabled={!isEditable}
+                className="flex-1 rounded-md border border-input bg-background px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              >
+                <option value="">--</option>
+                {[12,1,2,3,4,5,6,7,8,9,10,11].map((h) => (
+                  <option key={h} value={String(h)}>{h}</option>
+                ))}
+              </select>
+              <select
+                value={scheduledTime ? scheduledTime.split(":")[1] : ""}
+                onChange={(e) => {
+                  const hours = scheduledTime ? scheduledTime.split(":")[0] : "12";
+                  setScheduledTime(`${hours}:${e.target.value}`);
+                }}
+                disabled={!isEditable}
+                className="w-16 rounded-md border border-input bg-background px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              >
+                <option value="">--</option>
+                {["00","15","30","45"].map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              <select
+                value={(() => {
+                  if (!scheduledTime) return "AM";
+                  const h = parseInt(scheduledTime.split(":")[0]);
+                  return h >= 12 ? "PM" : "AM";
+                })()}
+                onChange={(e) => {
+                  const mins = scheduledTime ? scheduledTime.split(":")[1] : "00";
+                  let h = parseInt(scheduledTime?.split(":")[0] || "12");
+                  const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h === 12 ? 12 : h;
+                  let h24 = e.target.value === "PM"
+                    ? (hour12 === 12 ? 12 : hour12 + 12)
+                    : (hour12 === 12 ? 0 : hour12);
+                  setScheduledTime(`${String(h24).padStart(2, "0")}:${mins}`);
+                }}
+                disabled={!isEditable}
+                className="w-16 rounded-md border border-input bg-background px-2 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              >
+                <option value="AM">AM</option>
+                <option value="PM">PM</option>
+              </select>
+            </div>
           </div>
         </div>
 

@@ -693,7 +693,7 @@ export default function ContentSchedulerPage() {
                                   {post.scheduledAt && (
                                     <p className="text-xs text-primary mt-1 flex items-center gap-1">
                                       <Clock className="h-3 w-3" />
-                                      {format(new Date(post.scheduledAt), "dd MMM HH:mm")}
+                                      {format(new Date(post.scheduledAt), "dd MMM h:mm a")}
                                     </p>
                                   )}
                                 </div>
