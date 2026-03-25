@@ -1,10 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, isBefore } from "date-fns";
+import { useMemo, useState, useCallback, DragEvent } from "react";
+import {
+  format, startOfMonth, endOfMonth, eachDayOfInterval, getDay,
+  isToday, isBefore, addMonths, subMonths,
+} from "date-fns";
 import { es } from "date-fns/locale";
-import { FileVideo, FileImage, Clock, CheckCircle2, AlertCircle, Send, Play, X, Eye } from "lucide-react";
+import {
+  FileVideo, FileImage, Clock, CheckCircle2, AlertCircle,
+  Send, Play, X, Eye, ChevronLeft, ChevronRight, Layers, GripVertical,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface Post {
   id: string;
@@ -26,6 +33,7 @@ interface CalendarViewProps {
   posts: Post[];
   monthYear: string; // "2026-03"
   onPostClick: (post: Post) => void;
+  onPostReschedule?: (postId: string, newDate: string, time: string) => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -36,14 +44,6 @@ const STATUS_COLORS: Record<string, string> = {
   FAILED: "bg-red-50 text-red-700 border-red-200",
 };
 
-const STATUS_ICONS: Record<string, any> = {
-  DRAFT: Clock,
-  SCHEDULED: Clock,
-  PUBLISHING: Send,
-  POSTED: CheckCircle2,
-  FAILED: AlertCircle,
-};
-
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Borrador",
   SCHEDULED: "Programado",
@@ -52,7 +52,7 @@ const STATUS_LABELS: Record<string, string> = {
   FAILED: "Fallo",
 };
 
-// Quick preview overlay with carousel support
+// Quick preview overlay
 function PostPreview({ post, carouselSlides, onClose, onEdit }: {
   post: Post;
   carouselSlides: Post[];
@@ -66,10 +66,9 @@ function PostPreview({ post, carouselSlides, onClose, onEdit }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="relative w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden"
+        className="relative w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Media preview */}
         <div className="relative bg-black">
           {currentMedia.fileType.startsWith("video") ? (
             <video
@@ -78,14 +77,14 @@ function PostPreview({ post, carouselSlides, onClose, onEdit }: {
               controls
               autoPlay
               muted
-              className="w-full max-h-[400px] object-contain"
+              className="w-full max-h-[450px] object-contain"
             />
           ) : (
             <img
               key={currentMedia.id}
               src={currentMedia.fileUrl}
               alt=""
-              className="w-full max-h-[400px] object-contain"
+              className="w-full max-h-[450px] object-contain"
             />
           )}
           <button
@@ -94,57 +93,26 @@ function PostPreview({ post, carouselSlides, onClose, onEdit }: {
           >
             <X className="h-4 w-4" />
           </button>
-
-          {/* Type badge */}
           <div className="absolute top-2 left-2">
             {isCarousel ? (
               <Badge className="bg-purple-500 text-white">Carrusel {activeSlide + 1}/{carouselSlides.length}</Badge>
-            ) : post.postType === "REEL" || post.fileType.startsWith("video") ? (
+            ) : post.fileType.startsWith("video") ? (
               <Badge className="bg-blue-500 text-white">Reel</Badge>
             ) : null}
           </div>
-
-          {/* Carousel navigation arrows */}
           {isCarousel && (
             <>
               {activeSlide > 0 && (
-                <button
-                  onClick={() => setActiveSlide((s) => s - 1)}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70"
-                >
-                  ‹
-                </button>
+                <button onClick={() => setActiveSlide((s) => s - 1)} className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70">‹</button>
               )}
               {activeSlide < carouselSlides.length - 1 && (
-                <button
-                  onClick={() => setActiveSlide((s) => s + 1)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70"
-                >
-                  ›
-                </button>
+                <button onClick={() => setActiveSlide((s) => s + 1)} className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70">›</button>
               )}
             </>
           )}
         </div>
-
-        {/* Carousel dots */}
         {isCarousel && (
-          <div className="flex justify-center gap-1.5 py-2 bg-muted/30">
-            {carouselSlides.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setActiveSlide(i)}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  i === activeSlide ? "bg-primary" : "bg-muted-foreground/30"
-                }`}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Carousel thumbnails strip */}
-        {isCarousel && (
-          <div className="flex gap-1 px-4 py-2 overflow-x-auto">
+          <div className="flex gap-1 px-4 py-2 overflow-x-auto bg-muted/30">
             {carouselSlides.map((slide, i) => (
               <button
                 key={slide.id}
@@ -154,21 +122,14 @@ function PostPreview({ post, carouselSlides, onClose, onEdit }: {
                 }`}
               >
                 <img src={slide.fileUrl} alt="" className="h-full w-full object-cover" />
-                <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[8px] text-center">
-                  {i + 1}
-                </span>
+                <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[8px] text-center">{i + 1}</span>
               </button>
             ))}
           </div>
         )}
-
-        {/* Info */}
         <div className="p-4 space-y-3">
-          {/* Status + time */}
           <div className="flex items-center justify-between">
-            <Badge className={STATUS_COLORS[post.status]}>
-              {STATUS_LABELS[post.status] || post.status}
-            </Badge>
+            <Badge className={STATUS_COLORS[post.status]}>{STATUS_LABELS[post.status] || post.status}</Badge>
             {post.scheduledAt && (
               <span className="text-sm text-muted-foreground flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5" />
@@ -176,38 +137,16 @@ function PostPreview({ post, carouselSlides, onClose, onEdit }: {
               </span>
             )}
           </div>
-
-          {/* User context */}
           {post.userContext && (
             <div className="rounded bg-amber-50 border border-amber-200 px-3 py-1.5">
               <p className="text-xs text-amber-800"><span className="font-medium">Contexto:</span> {post.userContext}</p>
             </div>
           )}
-
-          {/* Caption */}
           {post.caption ? (
-            <p className="text-sm leading-relaxed whitespace-pre-line line-clamp-4">
-              {post.caption}
-            </p>
+            <p className="text-sm leading-relaxed whitespace-pre-line line-clamp-4">{post.caption}</p>
           ) : (
             <p className="text-sm text-muted-foreground italic">Sin caption</p>
           )}
-
-          {/* AI analysis pills */}
-          {post.aiAnalysis && (
-            <div className="flex flex-wrap gap-1.5">
-              {post.aiAnalysis.content_pillar && (
-                <Badge variant="outline" className="text-xs">{post.aiAnalysis.content_pillar}</Badge>
-              )}
-              {post.aiAnalysis.best_time && (
-                <Badge variant="outline" className="text-xs">
-                  <Clock className="mr-1 h-3 w-3" />{post.aiAnalysis.best_time}
-                </Badge>
-              )}
-            </div>
-          )}
-
-          {/* Edit button */}
           <button
             onClick={onEdit}
             className="w-full rounded-lg border bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
@@ -220,19 +159,25 @@ function PostPreview({ post, carouselSlides, onClose, onEdit }: {
   );
 }
 
-export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProps) {
+export function CalendarView({ posts, monthYear, onPostClick, onPostReschedule }: CalendarViewProps) {
   const [previewPost, setPreviewPost] = useState<Post | null>(null);
-  const [year, month] = monthYear.split("-").map(Number);
-  const monthDate = new Date(year, month - 1);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+
+  // Dynamic month navigation — start from batch month but allow navigating
+  const [baseYear, baseMonth] = monthYear.split("-").map(Number);
+  const [monthOffset, setMonthOffset] = useState(0);
+  const currentDate = addMonths(new Date(baseYear, baseMonth - 1), monthOffset);
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth() + 1;
 
   const days = useMemo(() => {
-    const start = startOfMonth(monthDate);
-    const end = endOfMonth(monthDate);
+    const start = startOfMonth(currentDate);
+    const end = endOfMonth(currentDate);
     return eachDayOfInterval({ start, end });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, month]);
+  }, [currentYear, currentMonth]);
 
-  // Group carousel slides by carouselGroupId
+  // Carousel grouping
   const carouselSlidesMap = useMemo(() => {
     const map = new Map<string, Post[]>();
     for (const post of posts) {
@@ -242,20 +187,17 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
         map.set(post.carouselGroupId, group);
       }
     }
-    // Sort each group by carouselOrder
     for (const [, slides] of map) {
       slides.sort((a, b) => (a.carouselOrder ?? 0) - (b.carouselOrder ?? 0));
     }
     return map;
   }, [posts]);
 
-  // Get the "display posts" — collapse carousel slides into one entry (the cover)
   const displayPosts = useMemo(() => {
     const seenCarousels = new Set<string>();
     return posts.filter((p) => {
       if (p.postType === "CAROUSEL" && p.carouselGroupId) {
         if (seenCarousels.has(p.carouselGroupId)) return false;
-        // Only show the first slide (order 0) as the representative
         const slides = carouselSlidesMap.get(p.carouselGroupId);
         if (slides && slides[0]?.id !== p.id) return false;
         seenCarousels.add(p.carouselGroupId);
@@ -264,7 +206,7 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
     });
   }, [posts, carouselSlidesMap]);
 
-  // Group display posts by date
+  // Group by date — include ALL months, not just current
   const postsByDate = useMemo(() => {
     const map: Record<string, Post[]> = {};
     for (const post of displayPosts) {
@@ -284,23 +226,71 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
     return [post];
   }
 
-  // Unscheduled posts (collapsed for carousels)
   const unscheduledPosts = displayPosts.filter((p) => !p.scheduledAt);
   const scheduledCount = displayPosts.filter((p) => p.scheduledAt).length;
 
-  // Day of week headers
   const weekDays = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
-
-  // Offset for first day (Monday = 0)
   const firstDayOffset = days.length > 0 ? (getDay(days[0]) + 6) % 7 : 0;
+
+  // Drag and drop handlers
+  function handleDragStart(e: DragEvent, post: Post) {
+    e.dataTransfer.setData("text/plain", post.id);
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleDragOver(e: DragEvent, dateKey: string) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverDate(dateKey);
+  }
+
+  function handleDragLeave() {
+    setDragOverDate(null);
+  }
+
+  function handleDrop(e: DragEvent, dateKey: string) {
+    e.preventDefault();
+    setDragOverDate(null);
+    const postId = e.dataTransfer.getData("text/plain");
+    if (!postId || !onPostReschedule) return;
+
+    // Find the post to get its current time, or default to 10:00
+    const post = displayPosts.find((p) => p.id === postId);
+    const time = post?.scheduledAt
+      ? format(new Date(post.scheduledAt), "HH:mm")
+      : "10:00";
+
+    onPostReschedule(postId, dateKey, time);
+  }
 
   return (
     <div className="space-y-4">
-      {/* Month header + stats */}
+      {/* Month navigation */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold capitalize">
-          {format(monthDate, "MMMM yyyy", { locale: es })}
-        </h3>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setMonthOffset((o) => o - 1)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <h3 className="text-lg font-semibold capitalize min-w-[180px] text-center">
+            {format(currentDate, "MMMM yyyy", { locale: es })}
+          </h3>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setMonthOffset((o) => o + 1)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          {monthOffset !== 0 && (
+            <Button size="sm" variant="ghost" onClick={() => setMonthOffset(0)} className="text-xs">
+              Volver a {format(new Date(baseYear, baseMonth - 1), "MMM yyyy", { locale: es })}
+            </Button>
+          )}
+        </div>
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span>{scheduledCount} programado{scheduledCount !== 1 ? "s" : ""}</span>
           {unscheduledPosts.length > 0 && (
@@ -311,7 +301,6 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
 
       {/* Calendar grid */}
       <div className="rounded-lg border">
-        {/* Week day headers */}
         <div className="grid grid-cols-7 border-b bg-muted/30">
           {weekDays.map((day) => (
             <div key={day} className="px-2 py-2 text-center text-xs font-medium text-muted-foreground">
@@ -320,47 +309,62 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
           ))}
         </div>
 
-        {/* Days grid */}
         <div className="grid grid-cols-7">
-          {/* Empty cells for offset */}
           {Array.from({ length: firstDayOffset }).map((_, i) => (
-            <div key={`empty-${i}`} className="min-h-[120px] border-b border-r bg-muted/10" />
+            <div key={`empty-${i}`} className="min-h-[140px] border-b border-r bg-muted/10" />
           ))}
 
           {days.map((day) => {
             const dateKey = format(day, "yyyy-MM-dd");
             const dayPosts = postsByDate[dateKey] || [];
             const past = isBefore(day, new Date()) && !isToday(day);
+            const isDragOver = dragOverDate === dateKey;
 
             return (
               <div
                 key={dateKey}
-                className={`min-h-[120px] border-b border-r p-1 ${
+                className={`min-h-[140px] border-b border-r p-1 transition-colors ${
+                  isDragOver ? "bg-primary/10 ring-2 ring-inset ring-primary/30" :
                   isToday(day) ? "bg-primary/5" : past ? "bg-muted/20" : ""
                 }`}
+                onDragOver={(e) => handleDragOver(e, dateKey)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, dateKey)}
               >
                 <div className={`text-xs font-medium mb-1 px-1 ${
-                  isToday(day) ? "text-primary" : past ? "text-muted-foreground" : ""
+                  isToday(day) ? "text-primary font-bold" : past ? "text-muted-foreground" : ""
                 }`}>
                   {format(day, "d")}
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {dayPosts.map((post) => {
-                    const StatusIcon = STATUS_ICONS[post.status] || Clock;
                     const isVideo = post.fileType.startsWith("video");
                     const isCarousel = post.postType === "CAROUSEL";
                     const slides = isCarousel ? getCarouselSlides(post) : [];
+
                     return (
-                      <button
+                      <div
                         key={post.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, post)}
                         onClick={() => setPreviewPost(post)}
-                        className={`w-full rounded overflow-hidden text-left text-xs border transition-all hover:shadow-md hover:scale-[1.02] ${STATUS_COLORS[post.status]}`}
+                        className={`rounded overflow-hidden border cursor-grab active:cursor-grabbing transition-all hover:shadow-md hover:scale-[1.02] ${STATUS_COLORS[post.status]}`}
                       >
-                        {/* Thumbnail */}
-                        <div className="relative w-full h-14 bg-muted">
+                        {/* Bigger thumbnail */}
+                        <div className="relative w-full h-20 bg-muted">
                           {isVideo ? (
-                            <div className="flex h-full items-center justify-center bg-gray-900">
-                              <Play className="h-4 w-4 text-white/80" />
+                            <div className="relative h-full bg-black">
+                              <video
+                                src={post.fileUrl}
+                                className="h-full w-full object-cover"
+                                muted
+                                preload="metadata"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="bg-white/80 rounded-full p-1.5">
+                                  <Play className="h-3.5 w-3.5 text-gray-900 ml-0.5" />
+                                </div>
+                              </div>
                             </div>
                           ) : (
                             <img
@@ -369,35 +373,34 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
                               className="h-full w-full object-cover"
                             />
                           )}
-                          {/* Status icon overlay */}
-                          <div className="absolute top-0.5 right-0.5">
-                            <StatusIcon className="h-3 w-3 drop-shadow" />
-                          </div>
                           {/* Type badge */}
                           <div className="absolute bottom-0.5 left-0.5">
                             {isCarousel ? (
-                              <span className="bg-purple-500 text-white text-[9px] px-1 rounded font-medium">{slides.length} slides</span>
+                              <span className="bg-purple-500 text-white text-[8px] px-1 rounded font-medium">{slides.length} slides</span>
                             ) : isVideo ? (
-                              <span className="bg-blue-500 text-white text-[9px] px-1 rounded font-medium">REEL</span>
+                              <span className="bg-blue-500 text-white text-[8px] px-1 rounded font-medium">REEL</span>
                             ) : null}
                           </div>
-                          {/* Preview eye icon on hover */}
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors group">
-                            <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                          {/* Drag handle */}
+                          <div className="absolute top-0.5 right-0.5 opacity-0 hover:opacity-100 transition-opacity">
+                            <GripVertical className="h-3.5 w-3.5 text-white drop-shadow" />
                           </div>
                         </div>
-                        {/* Time + caption snippet */}
-                        <div className="px-1 py-0.5">
-                          <span className="font-medium">
-                            {post.scheduledAt ? format(new Date(post.scheduledAt), "HH:mm") : ""}
-                          </span>
+                        {/* Time + caption */}
+                        <div className="px-1.5 py-1">
+                          <div className="flex items-center gap-1 text-[11px]">
+                            <Clock className="h-2.5 w-2.5 shrink-0" />
+                            <span className="font-medium">
+                              {post.scheduledAt ? format(new Date(post.scheduledAt), "HH:mm") : ""}
+                            </span>
+                          </div>
                           {post.caption && (
-                            <p className="truncate opacity-75 text-[10px] leading-tight">
-                              {post.caption.substring(0, 40)}
+                            <p className="truncate text-[10px] leading-tight opacity-70 mt-0.5">
+                              {post.caption.substring(0, 50)}
                             </p>
                           )}
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -407,32 +410,46 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
         </div>
       </div>
 
-      {/* Unscheduled posts */}
+      {/* Unscheduled posts — draggable to calendar */}
       {unscheduledPosts.length > 0 && (
         <div className="rounded-lg border p-4">
-          <h4 className="text-sm font-medium mb-3">
+          <h4 className="text-sm font-medium mb-1">
             Sin programar ({unscheduledPosts.length})
           </h4>
-          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+          <p className="text-xs text-muted-foreground mb-3">
+            Arrastra al calendario para programar
+          </p>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
             {unscheduledPosts.map((post) => {
               const isVideo = post.fileType.startsWith("video");
               const isCarousel = post.postType === "CAROUSEL";
               const slides = isCarousel ? getCarouselSlides(post) : [];
               return (
-                <button
+                <div
                   key={post.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, post)}
                   onClick={() => setPreviewPost(post)}
-                  className="group relative rounded-lg border overflow-hidden aspect-square hover:shadow-md transition-all hover:scale-105"
+                  className="group relative rounded-lg border overflow-hidden cursor-grab active:cursor-grabbing hover:shadow-md transition-all hover:scale-105"
                 >
-                  {isVideo ? (
-                    <div className="flex h-full items-center justify-center bg-gray-900">
-                      <Play className="h-5 w-5 text-white/60" />
-                    </div>
-                  ) : (
-                    <img src={post.fileUrl} alt="" className="h-full w-full object-cover" />
-                  )}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                    <Eye className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="aspect-square bg-muted">
+                    {isVideo ? (
+                      <div className="relative h-full bg-black">
+                        <video
+                          src={post.fileUrl}
+                          className="h-full w-full object-cover"
+                          muted
+                          preload="metadata"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="bg-white/80 rounded-full p-2">
+                            <Play className="h-4 w-4 text-gray-900 ml-0.5" />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <img src={post.fileUrl} alt="" className="h-full w-full object-cover" />
+                    )}
                   </div>
                   {/* Type badge */}
                   <div className="absolute bottom-1 left-1">
@@ -448,7 +465,11 @@ export function CalendarView({ posts, monthYear, onPostClick }: CalendarViewProp
                   >
                     {post.caption ? "Draft" : "Sin copy"}
                   </Badge>
-                </button>
+                  {/* Drag hint */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <GripVertical className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                  </div>
+                </div>
               );
             })}
           </div>

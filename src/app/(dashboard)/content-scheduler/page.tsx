@@ -286,6 +286,38 @@ export default function ContentSchedulerPage() {
     setEditingPost(null);
   }
 
+  async function handlePostReschedule(postId: string, newDate: string, time: string) {
+    const scheduledAt = new Date(`${newDate}T${time}:00`).toISOString();
+    await fetch("/api/content-scheduler/posts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        postId,
+        scheduledAt,
+        status: "SCHEDULED",
+      }),
+    });
+    // For carousel posts, also reschedule all slides in the group
+    const post = posts.find((p: any) => p.id === postId);
+    if (post?.postType === "CAROUSEL" && post?.carouselGroupId) {
+      const slides = posts.filter(
+        (p: any) => p.carouselGroupId === post.carouselGroupId && p.id !== postId
+      );
+      for (const slide of slides) {
+        await fetch("/api/content-scheduler/posts", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            postId: slide.id,
+            scheduledAt,
+            status: "SCHEDULED",
+          }),
+        });
+      }
+    }
+    if (activeBatch) await refreshPosts(activeBatch.id);
+  }
+
   async function handlePublish(postId: string) {
     const res = await fetch("/api/content-scheduler/publish", {
       method: "POST",
@@ -734,6 +766,7 @@ export default function ContentSchedulerPage() {
                     posts={posts}
                     monthYear={activeBatch.monthYear}
                     onPostClick={(post) => setEditingPost(post)}
+                    onPostReschedule={handlePostReschedule}
                   />
                 </TabsContent>
               </Tabs>
