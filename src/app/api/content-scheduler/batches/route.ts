@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { toProxyUrl } from "@/lib/storage";
+import { toPresignedUrl } from "@/lib/storage";
 
 // GET /api/content-scheduler/batches?clientId=xxx
 export async function GET(req: NextRequest) {
@@ -23,13 +23,20 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  // Convert R2 URLs to proxy URLs
-  const batchesWithProxyUrls = batches.map((b) => ({
-    ...b,
-    posts: b.posts.map((p) => ({ ...p, fileUrl: toProxyUrl(p.fileUrl) })),
-  }));
+  // Generate presigned URLs so files load directly from R2
+  const batchesWithUrls = await Promise.all(
+    batches.map(async (b) => ({
+      ...b,
+      posts: await Promise.all(
+        b.posts.map(async (p) => ({
+          ...p,
+          fileUrl: await toPresignedUrl(p.fileUrl),
+        }))
+      ),
+    }))
+  );
 
-  return NextResponse.json({ batches: batchesWithProxyUrls });
+  return NextResponse.json({ batches: batchesWithUrls });
 }
 
 // POST /api/content-scheduler/batches — Create a new batch

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { uploadFile, toProxyUrl } from "@/lib/storage";
+import { uploadFile, toPresignedUrl } from "@/lib/storage";
 
 // GET /api/content-scheduler/posts?clientId=xxx&batchId=xxx
 export async function GET(req: NextRequest) {
@@ -24,13 +24,15 @@ export async function GET(req: NextRequest) {
     ],
   });
 
-  // Convert R2 URLs to proxy URLs so files load in browser
-  const postsWithProxyUrls = posts.map((p) => ({
-    ...p,
-    fileUrl: toProxyUrl(p.fileUrl),
-  }));
+  // Generate presigned URLs so files load directly from R2 in browser
+  const postsWithUrls = await Promise.all(
+    posts.map(async (p) => ({
+      ...p,
+      fileUrl: await toPresignedUrl(p.fileUrl),
+    }))
+  );
 
-  return NextResponse.json({ posts: postsWithProxyUrls });
+  return NextResponse.json({ posts: postsWithUrls });
 }
 
 // POST /api/content-scheduler/posts — Upload files and create posts
@@ -111,7 +113,9 @@ export async function PATCH(req: NextRequest) {
     data,
   });
 
-  return NextResponse.json({ post });
+  return NextResponse.json({
+    post: { ...post, fileUrl: await toPresignedUrl(post.fileUrl) },
+  });
 }
 
 // DELETE /api/content-scheduler/posts
