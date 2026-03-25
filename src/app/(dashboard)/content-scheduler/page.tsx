@@ -153,8 +153,15 @@ export default function ContentSchedulerPage() {
       });
       const data = await res.json();
       if (data.results) {
+        const failures = data.results.filter((r: any) => !r.success);
+        if (failures.length > 0) {
+          console.error("Copy generation failures:", failures);
+          alert(`${data.results.length - failures.length} captions generados, ${failures.length} fallaron: ${failures[0]?.error || "Error desconocido"}`);
+        }
         // Reload from DB to get fresh data with generated copy
         if (activeBatch) await refreshPosts(activeBatch.id);
+      } else if (data.error) {
+        alert(`Error: ${data.error}`);
       }
     } finally {
       setGeneratingCopy(false);

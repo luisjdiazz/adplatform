@@ -78,13 +78,20 @@ export function PostEditor({ post, carouselSlides = [], onUpdate, onDelete, onPu
       const res = await fetch("/api/content-scheduler/generate-copy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postIds: [post.id] }),
+        body: JSON.stringify({
+          postIds: [post.id],
+          brandContext: userContext || undefined,
+        }),
       });
       const data = await res.json();
       if (data.results?.[0]?.success) {
         const result = data.results[0];
         setCaption(result.post.caption || "");
         onUpdate(result.post);
+      } else if (data.results?.[0]?.error) {
+        alert(`Error generando copy: ${data.results[0].error}`);
+      } else if (data.error) {
+        alert(`Error: ${data.error}`);
       }
     } finally {
       setGeneratingCopy(false);
@@ -181,13 +188,22 @@ export function PostEditor({ post, carouselSlides = [], onUpdate, onDelete, onPu
         {/* User context */}
         <div className="space-y-2 mb-4">
           <Label>Contexto / Instrucciones para AI</Label>
+          {post.fileType.startsWith("video") && !userContext && isEditable && (
+            <div className="rounded bg-blue-50 border border-blue-200 px-3 py-1.5">
+              <p className="text-xs text-blue-700">
+                Para reels, agrega una descripcion de que trata el video para que la AI genere un mejor caption.
+              </p>
+            </div>
+          )}
           <textarea
             value={userContext}
             onChange={(e) => setUserContext(e.target.value)}
             disabled={!isEditable}
             rows={2}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-            placeholder="Ej: Este post es sobre nuestra nueva coleccion de verano, tono playero y fresco..."
+            placeholder={post.fileType.startsWith("video")
+              ? "Describe el reel: de que se trata, que se muestra, que quieres comunicar..."
+              : "Ej: Este post es sobre nuestra nueva coleccion de verano, tono playero y fresco..."}
           />
         </div>
 

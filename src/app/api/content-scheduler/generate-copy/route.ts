@@ -132,8 +132,15 @@ export async function POST(req: NextRequest) {
           userContext
         );
       } else {
+        // For videos/reels: use text-based generation with user context
+        const videoDescription = [
+          `Video/Reel de contenido para ${client.name}.`,
+          userContext ? `Descripcion del video: ${userContext}` : "",
+          brandContext ? `Contexto de marca: ${brandContext}` : "",
+        ].filter(Boolean).join(" ");
+
         aiResult = await generateInstagramCopy(
-          `Video/Reel de contenido para ${client.name}. ${userContext || brandContext || ""}`,
+          videoDescription,
           post.fileType,
           brandProfile || undefined,
           brandContext,
