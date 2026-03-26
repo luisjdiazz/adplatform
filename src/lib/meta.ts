@@ -39,6 +39,9 @@ export function getOAuthUrl(appId: string, redirectUri: string, state: string) {
     "ads_read",
     "business_management",
     "pages_read_engagement",
+    "pages_manage_posts",
+    "instagram_basic",
+    "instagram_content_publish",
   ].join(",");
   return `https://www.facebook.com/${META_API_VERSION}/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${state}&response_type=code`;
 }

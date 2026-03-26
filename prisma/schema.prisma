@@ -81,15 +81,18 @@ model Client {
 }
 
 model MetaAccount {
-  id           String   @id @default(cuid())
-  clientId     String
-  client       Client   @relation(fields: [clientId], references: [id])
-  adAccountId  String
-  accessToken  String
-  accountName  String?
-  syncedAt     DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String          @id @default(cuid())
+  clientId        String
+  client          Client          @relation(fields: [clientId], references: [id])
+  adAccountId     String
+  accessToken     String
+  accountName     String?
+  igAccountId     String?
+  igUsername      String?
+  syncedAt        DateTime?
+  scheduledPosts  ScheduledPost[] @relation("PostMetaAccount")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   @@unique([clientId, adAccountId])
 }
@@ -301,6 +304,8 @@ model ScheduledPost {
   id              String       @id @default(cuid())
   clientId        String
   client          Client       @relation(fields: [clientId], references: [id])
+  metaAccountId   String?
+  metaAccount     MetaAccount? @relation("PostMetaAccount", fields: [metaAccountId], references: [id])
   batchId         String?
   batch           ContentBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
   fileUrl         String

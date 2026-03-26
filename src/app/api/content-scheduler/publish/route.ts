@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
   const post = await prisma.scheduledPost.findUnique({
     where: { id: postId },
     include: {
+      metaAccount: true,
       client: {
         include: { metaAccounts: true },
       },
@@ -25,9 +26,10 @@ export async function POST(req: NextRequest) {
   if (!post) return NextResponse.json({ error: "Post no encontrado" }, { status: 404 });
   if (!post.caption) return NextResponse.json({ error: "El post necesita un caption antes de publicar" }, { status: 400 });
 
-  const metaAccount = post.client.metaAccounts[0];
+  // Use the post's assigned metaAccount, or fall back to the client's first account
+  const metaAccount = post.metaAccount || post.client.metaAccounts[0];
   if (!metaAccount) {
-    return NextResponse.json({ error: "No hay cuenta de Meta conectada para este cliente" }, { status: 400 });
+    return NextResponse.json({ error: "No hay cuenta de Meta conectada. Conecta una cuenta de Instagram en la pagina de Clientes." }, { status: 400 });
   }
 
   // Mark as publishing

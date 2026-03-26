@@ -11,6 +11,9 @@ export async function GET() {
   const clients = await prisma.client.findMany({
     where: { agencyId },
     include: {
+      metaAccounts: {
+        select: { id: true, accountName: true, igAccountId: true, igUsername: true },
+      },
       _count: { select: { campaigns: true, metaAccounts: true } },
     },
     orderBy: { createdAt: "desc" },

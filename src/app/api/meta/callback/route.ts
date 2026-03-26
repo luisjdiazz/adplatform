@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeCodeForToken, getAdAccounts } from "@/lib/meta";
+import { getInstagramAccountFromToken } from "@/lib/instagram";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
@@ -17,6 +18,24 @@ export async function GET(req: NextRequest) {
     const tokenData = await exchangeCodeForToken(code, redirectUri);
     const accounts = await getAdAccounts(tokenData.access_token);
 
+    // Try to get Instagram account info linked to this token
+    let igAccountId: string | null = null;
+    let igUsername: string | null = null;
+    try {
+      const igInfo = await getInstagramAccountFromToken(tokenData.access_token);
+      igAccountId = igInfo.igAccountId;
+      // Fetch the IG username
+      const igRes = await fetch(
+        `https://graph.facebook.com/v20.0/${igInfo.igAccountId}?fields=username&access_token=${igInfo.pageAccessToken}`
+      );
+      if (igRes.ok) {
+        const igData = await igRes.json();
+        igUsername = igData.username || null;
+      }
+    } catch {
+      // No Instagram account linked — that's fine, ads-only account
+    }
+
     for (const account of accounts.data || []) {
       await prisma.metaAccount.upsert({
         where: {
@@ -25,6 +44,8 @@ export async function GET(req: NextRequest) {
         update: {
           accessToken: tokenData.access_token,
           accountName: account.name,
+          igAccountId,
+          igUsername,
           syncedAt: new Date(),
         },
         create: {
@@ -32,6 +53,8 @@ export async function GET(req: NextRequest) {
           adAccountId: account.account_id,
           accessToken: tokenData.access_token,
           accountName: account.name,
+          igAccountId,
+          igUsername,
           syncedAt: new Date(),
         },
       });

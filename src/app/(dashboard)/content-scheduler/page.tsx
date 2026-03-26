@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import {
   CalendarDays, Sparkles, Loader2, Plus, Upload, Clock,
   CheckCircle2, FileVideo, FileImage, Send, Layers,
-  Play, ChevronUp, ChevronDown, X, GripVertical,
+  Play, ChevronUp, ChevronDown, X, GripVertical, Instagram,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,10 +17,18 @@ import { BulkUploader } from "@/components/content-scheduler/BulkUploader";
 import { CalendarView } from "@/components/content-scheduler/CalendarView";
 import { PostEditor } from "@/components/content-scheduler/PostEditor";
 
+interface MetaAccountInfo {
+  id: string;
+  accountName: string | null;
+  igAccountId: string | null;
+  igUsername: string | null;
+}
+
 interface Client {
   id: string;
   name: string;
   brandProfile: any;
+  metaAccounts?: MetaAccountInfo[];
 }
 
 interface Batch {
@@ -42,6 +50,7 @@ export default function ContentSchedulerPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [editingPost, setEditingPost] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("upload");
+  const [selectedMetaAccountId, setSelectedMetaAccountId] = useState("");
 
   // New batch form
   const [showNewBatch, setShowNewBatch] = useState(false);
@@ -66,13 +75,23 @@ export default function ContentSchedulerPage() {
       .then((data) => {
         const list = data.clients || [];
         setClients(list);
-        if (list.length > 0) setSelectedClient(list[0].id);
+        if (list.length > 0) {
+          setSelectedClient(list[0].id);
+          // Auto-select first IG-enabled meta account
+          const igAccount = list[0].metaAccounts?.find((a: MetaAccountInfo) => a.igAccountId);
+          if (igAccount) setSelectedMetaAccountId(igAccount.id);
+        }
       });
   }, []);
 
   // Load batches when client changes
   useEffect(() => {
     if (!selectedClient) return;
+    // Auto-select first IG-enabled meta account for this client
+    const client = clients.find((c) => c.id === selectedClient);
+    const igAccount = client?.metaAccounts?.find((a) => a.igAccountId);
+    setSelectedMetaAccountId(igAccount?.id || "");
+
     fetch(`/api/content-scheduler/batches?clientId=${selectedClient}`)
       .then((r) => r.json())
       .then((data) => {
@@ -182,7 +201,19 @@ export default function ContentSchedulerPage() {
       });
       const data = await res.json();
       if (data.posts || data.schedule) {
-        // Reload from DB to get fresh scheduled posts with scheduledAt dates
+        // Assign selected meta account to all scheduled posts
+        if (selectedMetaAccountId) {
+          const freshPosts = (await (await fetch(`/api/content-scheduler/posts?batchId=${activeBatch.id}`)).json()).posts || [];
+          for (const p of freshPosts) {
+            if (p.status === "SCHEDULED" && !p.metaAccountId) {
+              await fetch("/api/content-scheduler/posts", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ postId: p.id, metaAccountId: selectedMetaAccountId }),
+              });
+            }
+          }
+        }
         if (activeBatch) await refreshPosts(activeBatch.id);
         setActiveTab("calendar");
       }
@@ -295,6 +326,7 @@ export default function ContentSchedulerPage() {
         postId,
         scheduledAt,
         status: "SCHEDULED",
+        metaAccountId: selectedMetaAccountId || undefined,
       }),
     });
     // For carousel posts, also reschedule all slides in the group
@@ -319,13 +351,24 @@ export default function ContentSchedulerPage() {
   }
 
   async function handlePublish(postId: string) {
+    // Assign the selected meta account to the post before publishing
+    if (selectedMetaAccountId) {
+      await fetch("/api/content-scheduler/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId, metaAccountId: selectedMetaAccountId }),
+      });
+    }
+
     const res = await fetch("/api/content-scheduler/publish", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ postId }),
     });
     const data = await res.json();
-    if (data.post) {
+    if (data.error) {
+      alert(`Error: ${data.error}`);
+    } else if (data.post) {
       handlePostUpdate(data.post);
     }
   }
@@ -385,6 +428,39 @@ export default function ContentSchedulerPage() {
               </SelectContent>
             </Select>
           </div>
+          {(() => {
+            const client = clients.find((c) => c.id === selectedClient);
+            const igAccounts = client?.metaAccounts?.filter((a) => a.igAccountId) || [];
+            if (igAccounts.length === 0) return (
+              <div className="w-52">
+                <Label className="text-xs text-muted-foreground">Cuenta Instagram</Label>
+                <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-input bg-muted/50 text-sm text-muted-foreground">
+                  <Instagram className="h-4 w-4" />
+                  Sin cuenta conectada
+                </div>
+              </div>
+            );
+            return (
+              <div className="w-52">
+                <Label className="text-xs text-muted-foreground">Cuenta Instagram</Label>
+                <Select value={selectedMetaAccountId} onValueChange={setSelectedMetaAccountId}>
+                  <SelectTrigger>
+                    <div className="flex items-center gap-2">
+                      <Instagram className="h-4 w-4 text-pink-500" />
+                      <SelectValue placeholder="Selecciona cuenta" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {igAccounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        @{a.igUsername || a.accountName || "Instagram"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

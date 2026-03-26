@@ -25,6 +25,7 @@ async function processScheduledPosts() {
       caption: { not: null },
     },
     include: {
+      metaAccount: true,
       client: {
         include: { metaAccounts: true },
       },
@@ -34,7 +35,8 @@ async function processScheduledPosts() {
   console.log(`[Instagram Poster] Found ${duePosts.length} posts due for publishing`);
 
   for (const post of duePosts) {
-    const metaAccount = post.client.metaAccounts[0];
+    // Use the post's assigned metaAccount, or fall back to client's first account
+    const metaAccount = post.metaAccount || post.client.metaAccounts[0];
     if (!metaAccount) {
       console.log(`[Instagram Poster] Skipping post ${post.id} — no Meta account for client ${post.client.name}`);
       await prisma.scheduledPost.update({

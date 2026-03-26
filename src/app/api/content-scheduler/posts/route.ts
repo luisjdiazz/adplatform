@@ -98,7 +98,7 @@ export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const { postId, caption, hashtags, scheduledAt, status, userContext, postType, carouselGroupId, carouselOrder } = await req.json();
+  const { postId, caption, hashtags, scheduledAt, status, userContext, postType, carouselGroupId, carouselOrder, metaAccountId } = await req.json();
   if (!postId) return NextResponse.json({ error: "postId requerido" }, { status: 400 });
 
   const data: any = {};
@@ -110,6 +110,7 @@ export async function PATCH(req: NextRequest) {
   if (postType !== undefined) data.postType = postType;
   if (carouselGroupId !== undefined) data.carouselGroupId = carouselGroupId;
   if (carouselOrder !== undefined) data.carouselOrder = carouselOrder;
+  if (metaAccountId !== undefined) data.metaAccountId = metaAccountId;
 
   const post = await prisma.scheduledPost.update({
     where: { id: postId },
