@@ -10,12 +10,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, ExternalLink } from "lucide-react";
 
+interface MetaAccountInfo {
+  id: string;
+  accountName: string | null;
+  igAccountId: string | null;
+  igUsername: string | null;
+}
+
 interface Client {
   id: string;
   name: string;
   slug: string;
   isActive: boolean;
   brandProfile: any;
+  metaAccounts?: MetaAccountInfo[];
   _count: { campaigns: number; metaAccounts: number };
 }
 
@@ -129,9 +137,28 @@ export default function ClientsPage() {
                   <span>{client._count?.campaigns || 0} campanas</span>
                   <span>{client._count?.metaAccounts || 0} cuentas Meta</span>
                 </div>
+                {(client.metaAccounts?.length || 0) > 0 && (
+                  <div className="space-y-1">
+                    {client.metaAccounts!.map((acc) => (
+                      <div key={acc.id} className="flex items-center gap-2 text-sm">
+                        <Badge variant="outline" className="font-normal">
+                          {acc.accountName || "Pagina sin nombre"}
+                        </Badge>
+                        {acc.igUsername && (
+                          <span className="text-muted-foreground">@{acc.igUsername}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex gap-2">
                   {(client._count?.metaAccounts || 0) > 0 ? (
-                    <Badge variant="success">Meta conectado</Badge>
+                    <>
+                      <Badge variant="success">Meta conectado</Badge>
+                      <Button size="sm" variant="outline" onClick={() => connectMeta(client.id)}>
+                        <Plus className="mr-1 h-3 w-3" /> Agregar cuenta
+                      </Button>
+                    </>
                   ) : (
                     <Button size="sm" variant="outline" onClick={() => connectMeta(client.id)}>
                       <ExternalLink className="mr-1 h-3 w-3" /> Conectar Meta
