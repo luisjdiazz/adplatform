@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForToken, getAdAccounts } from "@/lib/meta";
-import { getInstagramAccountFromToken } from "@/lib/instagram";
+import { exchangeCodeForToken } from "@/lib/meta";
 import { prisma } from "@/lib/prisma";
+
+const META_BASE_URL = "https://graph.facebook.com/v20.0";
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
@@ -16,43 +17,76 @@ export async function GET(req: NextRequest) {
 
   try {
     const tokenData = await exchangeCodeForToken(code, redirectUri);
-    const accounts = await getAdAccounts(tokenData.access_token);
+    const accessToken = tokenData.access_token;
 
-    // Try to get Instagram account info linked to this token
-    let igAccountId: string | null = null;
-    let igUsername: string | null = null;
-    try {
-      const igInfo = await getInstagramAccountFromToken(tokenData.access_token);
-      igAccountId = igInfo.igAccountId;
-      // Fetch the IG username
-      const igRes = await fetch(
-        `https://graph.facebook.com/v20.0/${igInfo.igAccountId}?fields=username&access_token=${igInfo.pageAccessToken}`
-      );
-      if (igRes.ok) {
-        const igData = await igRes.json();
-        igUsername = igData.username || null;
-      }
-    } catch {
-      // No Instagram account linked — that's fine, ads-only account
+    // Fetch Facebook Pages the user granted access to
+    const pagesRes = await fetch(
+      `${META_BASE_URL}/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${accessToken}`
+    );
+    if (!pagesRes.ok) {
+      console.error("Failed to fetch pages:", await pagesRes.text());
+      throw new Error("Error fetching Facebook pages");
     }
+    const pagesData = await pagesRes.json();
+    const pages = pagesData.data || [];
 
-    for (const account of accounts.data || []) {
+    if (pages.length === 0) {
+      // No pages — save at least the user token so the connection isn't lost
       await prisma.metaAccount.upsert({
         where: {
-          clientId_adAccountId: { clientId, adAccountId: account.account_id },
+          clientId_adAccountId: { clientId, adAccountId: `user_${Date.now()}` },
         },
         update: {
-          accessToken: tokenData.access_token,
-          accountName: account.name,
+          accessToken,
+          syncedAt: new Date(),
+        },
+        create: {
+          clientId,
+          adAccountId: `user_${Date.now()}`,
+          accessToken,
+          accountName: "Facebook Account",
+          syncedAt: new Date(),
+        },
+      });
+    }
+
+    for (const page of pages) {
+      // Check if this page has an Instagram Business account
+      let igAccountId: string | null = null;
+      let igUsername: string | null = null;
+
+      if (page.instagram_business_account?.id) {
+        igAccountId = page.instagram_business_account.id;
+        try {
+          const igRes = await fetch(
+            `${META_BASE_URL}/${igAccountId}?fields=username&access_token=${page.access_token}`
+          );
+          if (igRes.ok) {
+            const igData = await igRes.json();
+            igUsername = igData.username || null;
+          }
+        } catch {
+          // IG username fetch failed, continue without it
+        }
+      }
+
+      // Save each page as a MetaAccount, using page ID as adAccountId
+      await prisma.metaAccount.upsert({
+        where: {
+          clientId_adAccountId: { clientId, adAccountId: page.id },
+        },
+        update: {
+          accessToken: page.access_token,
+          accountName: page.name,
           igAccountId,
           igUsername,
           syncedAt: new Date(),
         },
         create: {
           clientId,
-          adAccountId: account.account_id,
-          accessToken: tokenData.access_token,
-          accountName: account.name,
+          adAccountId: page.id,
+          accessToken: page.access_token,
+          accountName: page.name,
           igAccountId,
           igUsername,
           syncedAt: new Date(),
