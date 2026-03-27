@@ -30,21 +30,39 @@ export async function GET(req: NextRequest) {
     const pagesData = await pagesRes.json();
     const pages = pagesData.data || [];
 
+    // Also fetch user profile info for better account naming
+    let userName = "Facebook Account";
+    try {
+      const meRes = await fetch(`${META_BASE_URL}/me?fields=id,name&access_token=${accessToken}`);
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        userName = meData.name || "Facebook Account";
+      }
+    } catch {}
+
+    console.log(`[META CALLBACK] User: ${userName}, Pages found: ${pages.length}`);
+    console.log(`[META CALLBACK] Pages data:`, JSON.stringify(pagesData, null, 2));
+
     if (pages.length === 0) {
-      // No pages — save at least the user token so the connection isn't lost
+      // No pages returned — save user-level token with the user's actual name
+      // This can happen if:
+      // 1. The user didn't grant page permissions
+      // 2. The user doesn't own/manage any Facebook Pages
+      // 3. The app is in dev mode and pages aren't accessible
       await prisma.metaAccount.upsert({
         where: {
           clientId_adAccountId: { clientId, adAccountId: `user_${Date.now()}` },
         },
         update: {
           accessToken,
+          accountName: userName,
           syncedAt: new Date(),
         },
         create: {
           clientId,
           adAccountId: `user_${Date.now()}`,
           accessToken,
-          accountName: "Facebook Account",
+          accountName: userName,
           syncedAt: new Date(),
         },
       });
@@ -94,8 +112,19 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Check what permissions the token actually has
+    try {
+      const debugRes = await fetch(`${META_BASE_URL}/me/permissions?access_token=${accessToken}`);
+      if (debugRes.ok) {
+        const debugData = await debugRes.json();
+        console.log(`[META CALLBACK] Token permissions:`, JSON.stringify(debugData, null, 2));
+      }
+    } catch {}
+
+    const pagesCount = pages.length;
+    const hasIg = pages.some((p: any) => p.instagram_business_account?.id);
     const baseUrl = process.env.NEXTAUTH_URL || req.url;
-    return NextResponse.redirect(new URL(`/clients?success=meta_connected`, baseUrl));
+    return NextResponse.redirect(new URL(`/clients?success=meta_connected&pages=${pagesCount}&ig=${hasIg}`, baseUrl));
   } catch (error) {
     console.error("Meta OAuth error:", error);
     const baseUrl = process.env.NEXTAUTH_URL || req.url;
