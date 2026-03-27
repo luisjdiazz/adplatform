@@ -41,7 +41,7 @@ export function getOAuthUrl(appId: string, redirectUri: string, state: string) {
     "instagram_basic",
     "instagram_content_publish",
   ].join(",");
-  return `https://www.facebook.com/${META_API_VERSION}/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${state}&response_type=code&auth_type=rerequest`;
+  return `https://www.facebook.com/${META_API_VERSION}/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${state}&response_type=code&auth_type=reauthenticate`;
 }
 
 export async function exchangeCodeForToken(code: string, redirectUri: string) {
