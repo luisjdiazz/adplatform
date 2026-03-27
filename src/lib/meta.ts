@@ -35,9 +35,7 @@ export async function metaApiPost(endpoint: string, token: string, body: Record<
 
 export function getOAuthUrl(appId: string, redirectUri: string, state: string) {
   const scopes = [
-    "ads_management",
-    "ads_read",
-    "business_management",
+    "pages_show_list",
     "pages_read_engagement",
     "pages_manage_posts",
     "instagram_basic",
