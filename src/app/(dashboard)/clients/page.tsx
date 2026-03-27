@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, ExternalLink, Trash2, Facebook, Instagram } from "lucide-react";
+import { Plus, ExternalLink, Trash2, Facebook, Instagram, Send } from "lucide-react";
+import QuickPublish from "@/components/QuickPublish";
 
 interface MetaAccountInfo {
   id: string;
@@ -31,6 +32,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [publishClient, setPublishClient] = useState<Client | null>(null);
 
   useEffect(() => {
     fetch("/api/clients")
@@ -185,6 +187,11 @@ export default function ClientsPage() {
                     <Button size="sm" variant="outline" className="w-full" onClick={() => connectMeta(client.id)}>
                       <Plus className="mr-1 h-3 w-3" /> Agregar cuenta
                     </Button>
+                    {client.metaAccounts!.some((a) => a.igAccountId) && (
+                      <Button size="sm" className="w-full" onClick={() => setPublishClient(client)}>
+                        <Send className="mr-1 h-3 w-3" /> Publicar en Instagram
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <Button size="sm" variant="outline" onClick={() => connectMeta(client.id)}>
@@ -195,6 +202,16 @@ export default function ClientsPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {publishClient && (
+        <QuickPublish
+          open={!!publishClient}
+          onOpenChange={(v) => { if (!v) setPublishClient(null); }}
+          clientId={publishClient.id}
+          clientName={publishClient.name}
+          metaAccounts={publishClient.metaAccounts || []}
+        />
       )}
     </div>
   );
